@@ -1,5 +1,7 @@
 # CNC Tutor
 
+![CNC Tutor's X, Y and Z lesson: the idea, this machine's travel and live position, a Try it step, a quiz and links to ncSender's docs](docs/screenshot.png)
+
 An [ncSender](https://github.com/siganberg/ncSender) plugin that teaches a new operator the basics, one short
 lesson at a time, **on their own machine**: from what X, Y and Z are to feeds and speeds.
 
