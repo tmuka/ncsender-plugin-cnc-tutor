@@ -123,7 +123,7 @@
   .ct-fig .f-spoil { fill: color-mix(in srgb, #c9a26b 45%, var(--color-surface)); stroke: #8a6a3d; stroke-width: 1; }
   .ct-fig .f-clamp { fill: #7d8590; stroke: #4b525b; }
   .ct-fig .f-bit { fill: #b8c2cc; stroke: #6b7682; stroke-width: 1.2; }
-  .ct-fig .f-paper { stroke: #f2f2f2; stroke-width: 3; }
+  .ct-fig .f-paper { fill: #fafafa; stroke: #8a8f96; stroke-width: 0.8; }
   .ct-fig .f-path { fill: none; stroke: var(--color-accent); stroke-width: 3; stroke-dasharray: 8 5; }
   .ct-fig .f-tab { fill: #c9a26b; stroke: var(--color-accent); }
   .ct-fig .f-chip { fill: #e0b878; stroke: #8a6a3d; }
@@ -475,9 +475,9 @@ function practiceProgram() {
     'G21 (millimeters)',
     'G90 (absolute positions)',
     'G17 (arcs in the XY plane)',
-    'G0 Z5 (up to 5 mm above the stock)',
+    'G0 Z15 (up to 15 mm above the stock, clear of clamps)',
     'M3 S18000 (spindle on, clockwise, 18000 RPM)',
-    'G4 P3 (wait 3 seconds for the spindle)',
+    'G4 P5 (wait 5 seconds for the spindle to get up to speed)',
     'G0 X0 Y0 (rapid over the start corner)',
     'G1 Z-0.5 F300 (plunge 0.5 mm into the stock)',
     'G1 X40 F1000 (cut along the front)',
@@ -490,6 +490,7 @@ function practiceProgram() {
     'G2 X20 Y8 I0 J7 F1000 (a full clockwise circle around X20 Y15)',
     'G0 Z5 (lift out)',
     'M5 (spindle off)',
+    'G0 Z15 (up clear of the clamps)',
     'G0 X0 Y0 (back over X0 Y0)',
     'M30 (end of the program)'
   ];
@@ -618,11 +619,12 @@ var CT_LESSONS = [
     body:
       '<p>A CNC router is a fast spinning blade on a robot that does exactly what it’s told, even when that’s wrong. It doesn’t feel the bit hitting a clamp or your hand. Most accidents come from a few habits, so they come first.</p>' +
       '<ul>' +
-      '<li><strong>Know your E-stop.</strong> The red mushroom button cuts power to the motors and spindle at once. Hit it the moment anything looks or sounds wrong: a clamp in the path, smoke, a bit breaking, the machine heading somewhere you didn’t expect. Don’t reach for the mouse first.</li>' +
+      '<li><strong>Know your E-stop.</strong> The red mushroom button stops the motors and, on most machines, the spindle. Check that yours stops the spindle too: on some, a router on its own power keeps running. Either way the bit coasts for a few seconds, so keep your hands out. Hit it the moment anything looks or sounds wrong: a clamp in the path, smoke, a bit breaking, the machine heading somewhere you didn’t expect. Don’t reach for the mouse first.</li>' +
       '<li><strong>Stop is not the E-stop.</strong> ncSender’s Stop and Pause are software: fine for a program you want to end, but they rely on the computer and the controller working. The E-stop doesn’t.</li>' +
       '<li><strong>Never leave a running job.</strong> Stay where you can reach the E-stop. Fires start from a dull bit rubbing in wood dust.</li>' +
       '<li><strong>Protect yourself.</strong> Safety glasses, hearing protection for the spindle and the cut, and a dust mask or a dust collector: fine wood and MDF dust harm your lungs.</li>' +
       '<li><strong>Nothing loose near the bit.</strong> Long hair tied back, no gloves, loose sleeves or jewelry near a spinning bit. Keep hands out of the machine while the spindle turns, even to clear chips.</li>' +
+      '<li><strong>Changing a bit:</strong> turn the spindle off (or unplug the router) first, and never leave the collet wrench on the nut.</li>' +
       '<li><strong>Hold the work down.</strong> A part that comes loose is thrown. [[workholding]] covers it.</li>' +
       '</ul>' +
       '<p>ncSender can check that the E-stop is released when it powers on and can pause on an open safety door; see the links below.</p>',
@@ -642,7 +644,7 @@ var CT_LESSONS = [
       '<li><strong>Y</strong> is toward you and away. <strong>Y+</strong> moves the spindle away from you, to the back.</li>' +
       '<li><strong>Z</strong> is up and down. <strong>Z+</strong> lifts the bit up, away from the work. <strong>Z−</strong> goes down, into it.</li></ul>' +
       '<p>A position is three numbers, one per axis, like X100 Y50 Z10. The numbers grow in the + direction. Z− is the one to respect: it’s the direction that cuts, and the one that crashes.</p>' +
-      '<p>On some machines the gantry moves instead of the table, but X+ still means the bit goes right relative to the work. If a jog goes the wrong way, the machine’s direction settings are wrong; ncSender’s Setup Wizard fixes them.</p>',
+      '<p>On most routers the gantry moves; on some the table moves instead, the opposite way, so the bit still goes X+ or Y+ relative to the work. If a jog goes the wrong way, the machine’s direction settings are wrong; ncSender’s Setup Wizard fixes them.</p>',
     tryIt: { check: 'axes', text: 'Jog <strong>X+</strong>, <strong>Y+</strong> and <strong>Z+</strong> once each, a small step. Watch which way the spindle goes. Make sure it has room to move first.' },
     askAfter: { q: 'Did X+ go right, Y+ go to the back, and Z+ go up?', no: 'If an axis went the other way, its direction is set backwards. Run ncSender’s Setup Wizard (Settings) and fix it before you cut anything: a program would come out mirrored or plunge the wrong way.' },
     quiz: [
@@ -654,9 +656,9 @@ var CT_LESSONS = [
   { id: 'homing', level: 1, title: 'Machine coordinates and homing', mins: 5, fig: 'home', live: 'homing',
     body:
       '<p>When the controller powers on, it doesn’t know where the spindle is. It just calls wherever it is “zero”. <strong>Homing</strong> fixes that: each axis moves slowly until it touches its limit switch, then backs off a little. That spot is the machine’s own fixed origin, called <strong>home</strong>.</p>' +
-      '<p>Positions measured from home are <strong>machine coordinates</strong> (ncSender shows them as MPos). They never change: X100 in machine coordinates is the same place on the table every day. That’s what lets ncSender remember zeros, a park spot and a tool setter’s location between sessions.</p>' +
+      '<p>Positions measured from home are <strong>machine coordinates</strong> (ncSender shows them as MPos). They never change: a machine position is the same place on the table every day. (On many machines they read negative after homing; that’s normal.) That’s what lets ncSender remember zeros, a park spot and a tool setter’s location between sessions.</p>' +
       '<ul><li>Home every time you power on, and after an E-stop or an alarm that lost position.</li>' +
-      '<li>Z homes first, going up, so the bit is lifted before X and Y move.</li>' +
+      '<li>Z usually homes first, going up, so the bit is lifted before X and Y move.</li>' +
       '<li>If a motor skipped (a crash, a stall), the machine’s idea of where it is is wrong. Homing again puts it right.</li></ul>',
     tryIt: { check: 'home', text: 'Make sure nothing is in the way of the spindle, then press <strong>Home</strong> in ncSender and watch each axis find its switch.' },
     quiz: [
@@ -669,7 +671,7 @@ var CT_LESSONS = [
   { id: 'limits', level: 1, title: 'Limits and alarms', mins: 5, fig: null, live: 'limits',
     body:
       '<p>Every axis can only go so far. Two kinds of limit keep it inside:</p>' +
-      '<ul><li><strong>Soft limits</strong> are in the controller’s settings: the travel of each axis, measured from home. A jog or program that would go past them is refused before the machine moves. They only work after homing.</li>' +
+      '<ul><li><strong>Soft limits</strong> are in the controller’s settings: the travel of each axis, measured from home. A jog that would go past them is refused before it starts. A program isn’t checked ahead: it runs until the line that would go past, then stops with an alarm (ncSender’s out-of-bounds warning helps you catch that before you start). They only work after homing.</li>' +
       '<li><strong>Hard limits</strong> are the limit switches: if one is pressed while the machine moves, everything stops at once.</li></ul>' +
       '<p>When something goes wrong, the controller stops and goes into <strong>Alarm</strong>: a limit was hit, a probe didn’t touch, homing failed, the E-stop was pressed. An alarm means “I stopped because I might not be where you think.” ncSender shows the alarm’s number and what it means.</p>' +
       '<p><strong>Unlocking</strong> clears the alarm without homing. Do that only when you know why it happened and that the position is still right. After a hard limit, an E-stop or a crash, <strong>home instead</strong>: the position may be off.</p>',
@@ -698,7 +700,7 @@ var CT_LESSONS = [
   { id: 'out-of-the-way', level: 2, title: 'Getting out of the way', mins: 3, fig: 'safez', live: 'safe',
     body:
       '<p>The most common crash is a move across the table with the bit too low: it hits a clamp, a screw or the edge of the stock. The rule: <strong>lift Z first, then move X and Y.</strong></p>' +
-      '<ul><li><strong>Safe Z</strong> is a height ncSender lifts to before moving across, set in ncSender’s settings.</li>' +
+      '<ul><li><strong>Safe Z Height</strong> is how high ncSender lifts before moving across, set in ncSender’s Settings › General.</li>' +
       '<li><strong>Go to zero</strong> takes the bit back over X0 Y0 (lifting first).</li>' +
       '<li><strong>Park</strong> moves the spindle to a spot you choose, out of the way, so you can load stock or change the bit.</li></ul>' +
       '<p>Programs follow the same rule: before each move across, they rapid up to a safe height above the stock and the clamps.</p>',
@@ -711,8 +713,8 @@ var CT_LESSONS = [
   { id: 'work-coordinates', level: 3, title: 'Work coordinates', mins: 6, fig: 'wcs', live: 'offsets',
     body:
       '<p>Machine coordinates are measured from home, but your stock could be anywhere on the table. So a program isn’t written in machine coordinates. It’s written from a point on the stock you choose, like its front-left corner on top: the <strong>work zero</strong>, X0 Y0 Z0.</p>' +
-      '<p>Before you run a program, you tell the machine where that point is: you jog the bit there and press <strong>Zero</strong>. The controller stores how far work zero is from home, the <strong>work offset</strong>. From then on, every position in the program is the work offset plus the program’s number: <strong>work position</strong> (WPos).</p>' +
-      '<p>The controller keeps <strong>six</strong> work offsets, named G54 to G59. G54 is the one used unless a program says otherwise. The others let you keep zeros for several jigs or vises on the table at once and switch between them.</p>' +
+      '<p>Before you run a program, you tell the machine where that point is: you jog the bit there and press <strong>Zero</strong>. The controller stores how far work zero is from home, the <strong>work offset</strong>. From then on, the machine goes to the work offset plus each of the program’s numbers. ncSender shows where the bit is measured from work zero as the <strong>work position</strong> (WPos).</p>' +
+      '<p>The controller keeps <strong>six</strong> work offsets, named G54 to G59. G54 is active after power-on or a reset; a program uses whichever is active unless it names one. The others let you keep zeros for several jigs or vises on the table at once and switch between them.</p>' +
       '<p>The table below is your machine’s six offsets right now, in machine coordinates.</p>',
     tryIt: { check: 'workspace', optional: true, text: 'Switch to another work offset in ncSender (for example G55), see the DRO’s numbers change while the machine doesn’t move, then switch back.' },
     quiz: [
@@ -726,26 +728,26 @@ var CT_LESSONS = [
   { id: 'zero-xy', level: 3, title: 'Zero X and Y', mins: 5, fig: 'xyzero', live: 'zeromap',
     body:
       '<p>Where X0 Y0 goes on the stock is decided when the program is made (in your CAM or plugin): usually the <strong>front-left corner</strong> or the <strong>center</strong>. Zero must go on the same spot, or the whole cut moves.</p>' +
-      '<ul><li><strong>On a corner:</strong> jog the bit over the corner, low enough to see it’s right on the edge (use small steps), then zero X and Y.</li>' +
+      '<ul><li><strong>On a corner:</strong> put the <strong>center</strong> of the bit over the corner, so half the bit hangs off the stock (lining up the bit’s edge is off by its radius). Get low enough to see it, with small steps, then zero X and Y.</li>' +
       '<li><strong>On the center:</strong> find the center (draw the diagonals, or zero on a corner and move half the size), then zero there.</li>' +
       '<li><strong>With a probe:</strong> a touch probe or block finds the corner by touching the edges, more exactly than by eye.</li></ul>' +
       '<p>The visualizer shows the program’s origin as a marker: check it’s where you zeroed before you run.</p>',
     tryIt: { check: 'zeroXY', text: 'Jog over a spot you can see, like the corner of a piece of scrap, and zero X and Y there in ncSender. Lift Z first if the bit is low.' },
     quiz: [
-      { q: 'The program’s origin is the center of the stock, but you zeroed on the front-left corner. What happens?', a: ['It cuts in the right place', 'The cut is shifted: half of it falls off the stock'], right: 1, why: 'The program draws around its origin. With the origin on the corner, most of it hangs off the stock.' }
+      { q: 'The program’s origin is the center of the stock, but you zeroed on the front-left corner. What happens?', a: ['It cuts in the right place', 'The cut is shifted: most of it hangs off the stock'], right: 1, why: 'The program draws around its origin. With the origin on the corner, most of it hangs off the stock.' }
     ],
     docs: ['zero-axis', 'dro-zero', 'probe-dialog'] },
 
   { id: 'zero-z', level: 3, title: 'Zero Z', mins: 5, fig: 'zzero',
     body:
       '<p>Z0 is usually the <strong>top of the stock</strong>: a 3 mm deep pocket then goes to Z−3. Some programs use the <strong>spoilboard</strong> (the bottom of the stock) instead, so a cut through always stops at the same place. The program and the zero must agree.</p>' +
-      '<ul><li><strong>Paper method:</strong> with the spindle off, slide a sheet of paper under the bit and lower it in 0.1 mm steps until the paper just drags. Zero Z, remembering the paper is about 0.1 mm thick.</li>' +
-      '<li><strong>Touch plate:</strong> lay the plate on the stock, clip the magnet to the bit, and probe. ncSender lowers until the bit touches and subtracts the plate’s thickness.</li></ul>' +
+      '<ul><li><strong>Paper method:</strong> with the spindle off, slide a sheet of paper under the bit and lower it in 0.1 mm steps until the paper just drags. The paper is about 0.1 mm thick, so set Z to 0.1 there (or zero it and accept 0.1 mm).</li>' +
+      '<li><strong>Touch plate:</strong> lay the plate on the stock, clip the magnet to the bit, and <strong>test the circuit first</strong>: touch the plate to the bit and see ncSender’s probe signal change. If it doesn’t, the bit would drive into the plate. Then probe: ncSender lowers until the bit touches and subtracts the plate’s thickness. Put the clip and plate away before the spindle starts.</li></ul>' +
       '<p>Never zero Z with the spindle running, and keep the bit clean: a chip under the tip makes every cut shallower.</p>',
     tryIt: { check: 'zeroZ', text: 'Lower the bit onto a piece of scrap (paper method or touch plate) and zero Z in ncSender. Then lift a few millimeters.' },
     quiz: [
-      { q: 'Z0 is the stock top. The program cuts to Z−6 in 6 mm stock. What happens?', a: ['It cuts exactly through', 'It cuts through, just touching the spoilboard; a little deeper is usual'], right: 1,
-        why: 'Z−6 is the bottom of 6 mm stock. Programs usually go a bit deeper (Z−6.2) to cut cleanly through into the spoilboard.' }
+      { q: 'Z0 is the top of 6 mm stock. To cut a part out cleanly, the last pass should go to…', a: ['Z−6 exactly', 'A little past it, like Z−6.2', 'Z−12, to be sure'], right: 1,
+        why: 'At exactly Z−6 a thin skin of fibers often stays at the bottom. A little past it cuts cleanly into the spoilboard, which is what the spoilboard is for.' }
     ],
     docs: ['zero-axis', 'probe-block', 'probe-types'] },
 
@@ -796,8 +798,8 @@ var CT_LESSONS = [
     body:
       '<p>An <strong>air cut</strong> runs the program with the bit above the stock, so you can watch the whole path without cutting anything. It’s the best way to catch a clamp in the way, a wrong zero or a surprise move.</p>' +
       '<ol><li>Zero X, Y and Z as you will for the real cut.</li>' +
-      '<li>Jog Z <strong>up 25 mm</strong> and zero Z there. Now the program’s Z0 is 25 mm above the stock, so every cut happens in the air.</li>' +
-      '<li>Run the program, with the spindle off or on, and watch: does it stay over the stock and away from the clamps?</li>' +
+      '<li>Jog Z <strong>up 25 mm</strong> and zero Z there. Now the program’s Z0 is 25 mm above the stock, so every cut happens in the air. Its safe heights go up 25 mm too: check Z has that much room above, or you’ll get a soft limit alarm.</li>' +
+      '<li>Run the program and watch (the spindle turns on as usual; on a router with its own switch you can leave it off): does it stay over the stock and away from the clamps?</li>' +
       '<li>When it ends, lower Z back onto the stock and <strong>zero Z again</strong> before the real cut. Forgetting this is the classic mistake: the real cut then happens 25 mm in the air.</li></ol>' +
       '<p>For the practice program, use a piece of scrap or no stock at all.</p>',
     tryIt: { check: 'airCut', text: 'Load the practice program (Check before you cut), raise Z0 25 mm as above, then run it and watch it to the end. Lower Z and rezero after.' },
@@ -809,14 +811,14 @@ var CT_LESSONS = [
 
   { id: 'pause-stop', level: 4, title: 'Pause, stop and resume', mins: 5, fig: null,
     body:
-      '<ul><li><strong>Pause</strong> (feed hold) slows the machine to a stop on the path, keeping its place. <strong>Resume</strong> carries on. Good for looking closer, clearing chips (spindle stopped) or checking a clamp.</li>' +
+      '<ul><li><strong>Pause</strong> (feed hold) slows the machine to a stop on the path, keeping its place. <strong>Resume</strong> carries on. Good for looking closer or checking a clamp. <strong>The spindle keeps turning</strong>: to clear chips, stop the spindle and wait for it to stop before reaching in.</li>' +
       '<li><strong>Stop</strong> ends the program. Starting again starts from the top.</li>' +
       '<li><strong>Overrides</strong> change the feed and spindle speed while the program runs, as a percentage. Slow down if it chatters or the cut sounds strained; speed up if it’s timid.</li>' +
       '<li><strong>Start From Line</strong> restarts partway through, for example after a broken bit. Be careful: it starts at the line you choose, so the spindle, Z and the position must be right for it.</li>' +
       '<li>The <strong>E-stop</strong> is for danger, not for ending a job.</li></ul>',
     tryIt: { check: 'hold', optional: true, text: 'During an air cut, press Pause, wait, then Resume.' },
     quiz: [
-      { q: 'The cut is screeching and the bit is smoking. First:', a: ['Turn the feed override up', 'Pause, then find out why (a dull bit, feed too slow, wrong speed)', 'Keep going and see'], right: 1, why: 'Smoke means heat: rubbing instead of cutting. Stop it, then fix the feeds or the bit. If anything is on fire, E-stop.' }
+      { q: 'The cut is screeching and the bit is smoking. First:', a: ['Turn the feed override up', 'Pause and look', 'Stop the job (E-stop if there’s flame), then find out why'], right: 2, why: 'Smoke means heat: the bit is rubbing. Pausing leaves it spinning in one spot, which burns worse. Stop, then fix the feeds or the bit (a dull bit, feed too slow, RPM too high).' }
     ],
     docs: ['run', 'overrides', 'start-from-line'] },
 
@@ -828,7 +830,7 @@ var CT_LESSONS = [
       '<li><strong>Ball end</strong> for 3D carving: a round tip that leaves smooth curves.</li>' +
       '<li><strong>V-bit</strong> for engraving, sign lettering and chamfers: the deeper it goes, the wider the line.</li>' +
       '<li><strong>Upcut</strong> spirals lift chips out (clean bottom, fuzzy top edge). <strong>Downcut</strong> pushes them down (clean top edge, chips packed in the slot). <strong>Compression</strong> bits do both, for plywood.</li>' +
-      '<li><strong>Flutes</strong> are the cutting edges. One or two flutes clear chips well in plastic and wood on a hobby machine; more flutes suit harder materials.</li></ul>' +
+      '<li><strong>Flutes</strong> are the cutting edges. On a hobby router, 2 flutes is usual for wood, and 1 flute for plastics and aluminum: fewer flutes leave room for bigger chips.</li></ul>' +
       '<p>Cutting length matters too: a bit can only cut as deep as its flutes, and a longer bit bends more. Use the shortest bit that reaches.</p>',
     quiz: [
       { q: 'You want a clean top edge cutting plywood. Which bit?', a: ['Upcut', 'Downcut or compression'], right: 1, why: 'A downcut pushes the top fibers down instead of tearing them up.' }
@@ -853,7 +855,7 @@ var CT_LESSONS = [
     body:
       '<p>The bit can’t go full depth in one pass. A program steps down:</p>' +
       '<ul><li><strong>Depth per pass</strong> (stepdown): how much deeper each pass goes. A common start in wood is half the bit’s diameter; less in hard materials and with small bits.</li>' +
-      '<li><strong>Stepover</strong>: how far the bit moves over between rows when clearing a pocket, as a share of its diameter. 40–50 % roughs it out; 10–20 % leaves a smooth floor.</li>' +
+      '<li><strong>Stepover</strong>: how far the bit moves over between rows when clearing a pocket, as a share of its diameter. With a flat bit, 40–50 % is normal and leaves a flat floor. With a ball bit carving 3D, 10–20 % gives a smooth surface.</li>' +
       '<li><strong>Roughing then finishing:</strong> take most of the material fast, then a light last pass for a clean wall and an exact size.</li></ul>' +
       '<p>A slot (the bit cutting with both sides, like the first pass of a profile) is the hardest work for a bit: go a little shallower there.</p>',
     quiz: [
@@ -863,12 +865,12 @@ var CT_LESSONS = [
 
   { id: 'climb-conventional', level: 5, title: 'Climb vs conventional', mins: 4, fig: 'climb',
     body:
-      '<p>When a bit cuts along a wall, it turns either with the travel or against it:</p>' +
-      '<ul><li><strong>Conventional</strong>: the edge meets the material against the direction of travel. More forgiving on a less stiff machine; it can leave a rougher edge in some woods.</li>' +
-      '<li><strong>Climb</strong>: the edge bites in with the travel, taking a thick chip first. Usually a cleaner edge, but it pulls the bit into the work, so a flexible machine can be dragged off line.</li></ul>' +
-      '<p>With the spindle turning clockwise (M3), seen from above: going around the <strong>outside</strong> of a part <strong>clockwise</strong> is conventional, counterclockwise is climb. Inside a pocket it’s the reverse. Your CAM or plugin has a setting for it. A common habit: rough conventional, finish with a light climb pass.</p>',
+      '<p>When a bit cuts along a wall, each cutting edge takes its chip one of two ways:</p>' +
+      '<ul><li><strong>Conventional</strong>: the chip starts thin and ends thick; the bit pushes back against the feed. More forgiving on a less stiff machine; it can leave a rougher edge in some woods.</li>' +
+      '<li><strong>Climb</strong>: the chip starts thick and ends thin; the bit pulls itself into the work. Usually a cleaner edge, but it pulls the bit into the work, so a flexible machine can be dragged off line.</li></ul>' +
+      '<p>With the spindle turning clockwise (M3), seen from above: going around the <strong>outside</strong> of a part <strong>clockwise</strong> is climb, counterclockwise is conventional. Inside a pocket it’s the reverse: counterclockwise is climb. Your CAM or plugin has a setting for it. A common habit: rough conventional, finish with a light climb pass.</p>',
     quiz: [
-      { q: 'Spindle clockwise, cutting around the outside of a part counterclockwise. That’s…', a: ['Climb', 'Conventional'], right: 0, why: 'Outside: clockwise is conventional, counterclockwise is climb.' }
+      { q: 'Spindle clockwise, cutting around the outside of a part counterclockwise. That’s…', a: ['Climb', 'Conventional'], right: 1, why: 'Outside a part with a clockwise spindle: clockwise is climb, counterclockwise is conventional.' }
     ],
     docs: [] },
 
@@ -910,10 +912,10 @@ var CT_GLOSSARY = [
   ['Air cut', 'Running a program with Z0 raised, so it cuts nothing.', 'air-cut'],
   ['Alarm', 'The controller stopped because something went wrong; it won’t move until cleared.', 'limits'],
   ['Chip load', 'How thick a chip each cutting edge takes: feed ÷ (RPM × flutes).', 'feeds-speeds'],
-  ['Climb milling', 'Cutting with the bit’s edge moving with the travel.', 'climb-conventional'],
-  ['Conventional milling', 'Cutting with the bit’s edge moving against the travel.', 'climb-conventional'],
+  ['Climb milling', 'Each chip starts thick and ends thin; the bit pulls into the work.', 'climb-conventional'],
+  ['Conventional milling', 'Each chip starts thin and ends thick; the bit pushes back.', 'climb-conventional'],
   ['DRO', 'Digital readout: the position numbers in ncSender.', 'work-coordinates'],
-  ['E-stop', 'The emergency stop button: cuts power to motors and spindle.', 'safety'],
+  ['E-stop', 'The emergency stop button: stops the motors and, on most machines, the spindle.', 'safety'],
   ['Feed hold', 'A pause that stops on the path and keeps the program’s place.', 'pause-stop'],
   ['Feed rate', 'How fast the bit moves through the work (F).', 'feeds-speeds'],
   ['Flute', 'One cutting edge of a bit.', 'bits'],
@@ -1031,9 +1033,9 @@ var CT_FIGS = {
     return ctSvg(
       '<rect class="f-spoil" x="20" y="150" width="280" height="22"/>' + ctText(160, 166, 'spoilboard', 'f-txt', 'middle') +
       '<rect class="f-stock" x="40" y="105" width="240" height="45"/>' +
-      '<rect class="f-line" x="70" y="30" width="20" height="50" rx="3"/><path class="f-bit" d="M75 80 h10 v22 l-5 3 l-5 -3 z"/>' +
-      '<line class="f-paper" x1="55" y1="104" x2="110" y2="104"/>' + ctText(118, 100, 'paper: lower until it drags', 'f-txt') +
-      ctText(296, 102, 'Z0 = top', 'f-acc-txt', 'end') + '<line class="f-acc" x1="40" y1="105" x2="300" y2="105"/>', 320, 180, 'Zero Z on the stock top');
+      '<rect class="f-line" x="108" y="20" width="24" height="46" rx="3"/><path class="f-bit" d="M114 66 h12 v34 l-6 3 l-6 -3 z"/>' +
+      '<rect class="f-paper" x="70" y="102" width="90" height="3"/>' + ctText(44, 128, 'paper: lower until it just drags', 'f-txt') +
+      '<line class="f-acc" x1="40" y1="105" x2="300" y2="105"/>' + ctText(296, 98, 'Z0 = top of the stock', 'f-acc-txt', 'end'), 320, 180, 'Zero Z on the stock top');
   },
   tlo: function() {
     return ctSvg(
@@ -1076,8 +1078,8 @@ var CT_FIGS = {
       '<rect class="f-stock" x="90" y="60" width="140" height="80"/>' + ctText(160, 104, 'part', 'f-txt', 'middle') +
       '<rect class="f-acc" x="70" y="40" width="180" height="120" rx="4" fill="none"/>' +
       ctArrow(110, 40, 190, 40, 'f-acc') + ctArrow(250, 80, 250, 130, 'f-acc') +
-      ctText(160, 30, 'outside, clockwise = conventional', 'f-acc-txt', 'middle') +
-      ctText(160, 182, 'outside, counterclockwise = climb', 'f-txt', 'middle') + ctText(160, 196, '(spindle clockwise, M3, seen from above)', 'f-txt', 'middle'), 320, 205, 'Climb and conventional around a part');
+      ctText(160, 30, 'outside, clockwise = climb', 'f-acc-txt', 'middle') +
+      ctText(160, 182, 'outside, counterclockwise = conventional', 'f-txt', 'middle') + ctText(160, 196, '(spindle clockwise, M3, seen from above)', 'f-txt', 'middle'), 320, 205, 'Climb and conventional around a part');
   },
   clamps: function() {
     return ctSvg(
