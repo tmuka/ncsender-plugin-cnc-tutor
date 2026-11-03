@@ -14,7 +14,7 @@ test('no controller commands anywhere', () => {
 
 test('only the read and progress endpoints are used', () => {
   const used = [...new Set(html.match(/'\/api\/[^']*'/g).map((s) => s.slice(1, -1)))].sort();
-  assert.deepStrictEqual(used, ['/api/firmware', '/api/gcode-files/load-temp', '/api/plugins/', '/api/server-state', '/api/settings']);
+  assert.deepStrictEqual(used, ['/api/firmware', '/api/gcode-files/load-temp', '/api/plugins/', '/api/server-state', '/api/settings', '/api/tools']);
   assert.match(html, /'\/api\/plugins\/' \+ PLUGIN_ID \+ '\/settings'/);
 });
 
@@ -40,7 +40,7 @@ test('every fetch goes to an allowed endpoint', () => {
     assert.ok(c === 'BASE_URL + path' || /^BASE_URL \+ '\/api\/(plugins\/' \+ PLUGIN_ID \+ '\/settings'|gcode-files\/load-temp')$/.test(c), 'fetch(' + c + ')');
   }
   const gets = [...html.matchAll(/getJson\('([^']*)'/g)].map((m) => m[1]);
-  for (const g of gets) assert.ok(['/api/firmware', '/api/settings', '/api/server-state', '/api/plugins/'].includes(g), 'getJson ' + g);
+  for (const g of gets) assert.ok(['/api/firmware', '/api/settings', '/api/server-state', '/api/tools', '/api/plugins/'].includes(g), 'getJson ' + g);
 });
 
 test('the practice program only loads when nothing is running', () => {

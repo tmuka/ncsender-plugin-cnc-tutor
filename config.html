@@ -173,6 +173,18 @@
   .ct-fig .f-glow { fill: color-mix(in srgb, #e5534b 45%, transparent); }
   .ct-fig .f-red-fill { fill: #b3261e; } .ct-fig .f-red-top { fill: #e5534b; } .ct-fig .f-red-ridge { stroke: #b3261e; stroke-width: 4; stroke-linecap: round; }
   .ct-fig .f-warn-fill { fill: #f2c94c; } .ct-fig .f-warn-txt { fill: #3a2a00; font-weight: 700; font-size: 10px; letter-spacing: .06em; }
+  .ct-fig .f-nut { fill: #9aa5b1; stroke: #4b525b; stroke-width: 1.2; }
+  .ct-fig .f-clip { fill: #c0392b; stroke: #6b1d16; }
+  .ct-fig .f-wire { fill: none; stroke: #c0392b; stroke-width: 2; }
+  .ct-fig .f-plate { fill: #c3ccd5; stroke: #6b7682; stroke-width: 1.5; }
+  .ct-fig .f-plate-lip { fill: #8d98a4; }
+  .ct-fig .f-led-off { fill: #3b4450; stroke: #222b35; } .ct-fig .f-led-on { fill: #3fdc8f; stroke: #1e7a4c; }
+  .ct-fig .f-ring { fill: none; stroke: var(--ct-z); stroke-width: 2; }
+  .ct-fig .f-tls { fill: #59687a; stroke: #2c3640; } .ct-fig .f-plunger { fill: #c3ccd5; stroke: #4b525b; }
+  .ct-fig .f-rack { fill: #59687a; } .ct-fig .f-fork { stroke: #59687a; stroke-width: 4; stroke-linecap: round; }
+  .ct-fig .f-toolhold { fill: #c3ccd5; stroke: #4b525b; stroke-width: 1.5; }
+  .ct-fig .f-hole { fill: color-mix(in srgb, var(--color-surface) 75%, #c9a26b); stroke: #8a6a3d; }
+  .ct-fig .f-ball { fill: #e5534b; stroke: #8a1f19; }
   .ct-figbox { cursor: pointer; position: relative; }
   .ct-fighint { display: block; text-align: right; font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px; }
   .ct-facts { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -399,8 +411,9 @@ function startTracker(state) {
   workOffsets(ms).forEach(function(w) { offsets[w.name] = w.offset; });
   return {
     start: { homed: !!ms.homed, workspace: String(ms.workspace || 'G54').toUpperCase(), offsets: offsets,
-      job: state && state.jobLoaded ? { filename: state.jobLoaded.filename, status: state.jobLoaded.status } : null },
+      job: state && state.jobLoaded ? { filename: state.jobLoaded.filename, status: state.jobLoaded.status } : null, tool: ms.tool, toolLengthSet: !!ms.toolLengthSet },
     lastIdle: ctStatus(ms) === 'Idle' ? ctVec(ms.MPos) : null,
+    pins: {}, probing: false, probeDone: false, probeAlarm: false, toolChanging: false, toolChangeDone: false,
     seen: {}, jobSeen: {}, runAfterHold: false, airZ: null, workspaces: [String(ms.workspace || 'G54').toUpperCase()], moves: [], state: state || {}
   };
 }
@@ -409,6 +422,13 @@ function trackState(tr, state) {
   tr.state = state || {};
   if (status) tr.seen[status] = true;
   if (status === 'Run' && tr.seen.Hold) tr.runAfterHold = true;
+  // Probe input P, tool setter T (ncSender normalizes grblHAL's pins);
+  // isProbing is set while ncSender's Probe dialog runs a probe.
+  String(ms.Pn || '').split('').forEach(function(c) { tr.pins[c] = true; });
+  if (ms.isProbing) { tr.probing = true; if (status === 'Alarm') tr.probeAlarm = true; }
+  else if (tr.probing) { tr.probing = false; tr.probeDone = true; if (status === 'Alarm') tr.probeAlarm = true; }
+  if (ms.isToolChanging) tr.toolChanging = true;
+  else if (tr.toolChanging) { tr.toolChanging = false; tr.toolChangeDone = true; }
   var job = state && state.jobLoaded;
   if (job && job.status) {
     var key = (job.filename || '') + '|' + job.status;
@@ -484,6 +504,34 @@ var CHECKS = {
       { label: 'Resume it', done: held && tr.runAfterHold, detail: '' }
     ], get done() { return this.items[0].done && this.items[1].done; } };
   },
+  probeSignal: function(tr) {
+    var ms = tr.state.machineState || {}, now = String(ms.Pn || '').indexOf('P') >= 0;
+    return { items: [{ label: 'Touch the plate to the bit', done: !!tr.pins.P, detail: now ? 'Touching now: the probe input is on.' : tr.pins.P ? 'Seen: the probe input came on.' : '' }], done: !!tr.pins.P };
+  },
+  probeCycle: function(tr, f) {
+    var ms = tr.state.machineState || {}, ws = String(ms.workspace || 'G54').toUpperCase(), was = tr.start.offsets[ws], now = activeOffset(ms);
+    var moved = !!(was && now && CT_AXES.some(function(k) { return Math.abs(now[k] - was[k]) > 0.0005; }));
+    var ok = tr.probeDone && !tr.probeAlarm;
+    return { items: [
+      { label: 'Run a probe from ncSender’s Probe dialog', done: tr.probeDone || tr.probing, detail: tr.probing ? 'Probing…' : tr.probeAlarm ? 'It ended in an alarm: check the clip and the plate, unlock, and try again.' : '' },
+      { label: 'It finishes and sets the zero', done: ok && moved, detail: ok && moved ? 'The zero of ' + ws + ' moved to where the plate said.' : '' }
+    ], get done() { return this.items[1].done; } };
+  },
+  tlsMeasure: function(tr) {
+    var ms = tr.state.machineState || {}, measured = !!ms.toolLengthSet;
+    var did = !!tr.pins.T || (!tr.start.toolLengthSet && measured);
+    return { items: [
+      { label: 'Measure the bit on the tool length setter', done: did, detail: tr.pins.T ? 'Seen: the tool setter was touched.' : '' },
+      { label: 'Its length is set', done: did && measured, detail: did && measured ? 'Tool ' + (ms.tool != null ? ms.tool : '') + ' is measured.' : '' }
+    ], get done() { return this.items[1].done; } };
+  },
+  toolChange: function(tr) {
+    var ms = tr.state.machineState || {}, changed = ms.tool != null && ms.tool !== tr.start.tool;
+    return { items: [
+      { label: 'Change tools from ncSender', done: tr.toolChanging || tr.toolChangeDone, detail: tr.toolChanging ? 'Changing tools…' : '' },
+      { label: 'The new tool is in', done: tr.toolChangeDone && changed, detail: tr.toolChangeDone && changed ? 'Tool ' + ms.tool + ' is in the spindle.' : '' }
+    ], get done() { return this.items[1].done; } };
+  },
   airCut: function(tr) {
     var ran = !!tr.jobSeen[CT_SAMPLE_NAME + '|running'], done = !!tr.jobSeen[CT_SAMPLE_NAME + '|completed'];
     return { items: [
@@ -528,9 +576,35 @@ if (typeof module !== 'undefined' && module.exports) {
 // load into ncSender (nothing runs until the operator presses Start), and
 // a plain-words reading of a G-code line.
 
-// A 40 x 30 mm rectangle and a circle, 0.5 mm deep, in mm (G21) whatever the
-// operator's units: X0 Y0 is the rectangle's front-left corner, Z0 the stock top.
-function practiceProgram() {
+// A rectangle and a circle cut shallow, in the operator's units: in mm (G21)
+// 40 x 30 mm and 0.5 mm deep, in inches (G20) 1.5 x 1.25 in and 0.02 in deep.
+// X0 Y0 is the rectangle's front-left corner, Z0 the stock top.
+function practiceProgram(units) {
+  if (units === 'in') return [
+    '(CNC Tutor practice program: a 1.5 x 1.25 in rectangle and a circle, 0.02 in deep)',
+    '(X0 Y0 is the front-left corner of the rectangle, Z0 the top of the stock)',
+    'G20 (inches)',
+    'G90 (absolute positions)',
+    'G17 (arcs in the XY plane)',
+    'G0 Z0.6 (up to 0.6 in above the stock, clear of clamps)',
+    'M3 S18000 (spindle on, clockwise, 18000 RPM)',
+    'G4 P5 (wait 5 seconds for the spindle to get up to speed)',
+    'G0 X0 Y0 (rapid over the start corner)',
+    'G1 Z-0.02 F12 (plunge 0.02 in into the stock)',
+    'G1 X1.5 F40 (cut along the front)',
+    'G1 Y1.25 (cut up the right side)',
+    'G1 X0 (cut along the back)',
+    'G1 Y0 (cut down the left side, back to the start)',
+    'G0 Z0.2 (lift out of the cut)',
+    'G0 X0.75 Y0.375 (rapid to the bottom of the circle)',
+    'G1 Z-0.02 F12 (plunge)',
+    'G2 X0.75 Y0.375 I0 J0.25 F40 (a full clockwise circle around X0.75 Y0.625)',
+    'G0 Z0.2 (lift out)',
+    'M5 (spindle off)',
+    'G0 Z0.6 (up clear of the clamps)',
+    'G0 X0 Y0 (back over X0 Y0)',
+    'M30 (end of the program)'
+  ];
   return [
     '(CNC Tutor practice program: a 40 x 30 mm rectangle and a circle, 0.5 mm deep)',
     '(X0 Y0 is the front-left corner of the rectangle, Z0 the top of the stock)',
@@ -663,7 +737,21 @@ var CT_DOCS = {
   'quickcut': { label: 'QuickCut plugin', path: '/plugins/quickcut/' },
   'safety-door': { label: 'Safety door', path: '/features/safety-door/' },
   'keepout': { label: 'Keepout zone', path: '/features/keepout-zone/' },
-  'faq-new': { label: 'FAQ: I have a new controller, where do I start?', path: '/faq/#i-have-a-new-controller-where-do-i-start' }
+  'faq-new': { label: 'FAQ: I have a new controller, where do I start?', path: '/faq/#i-have-a-new-controller-where-do-i-start' },
+  'probe-autozero': { label: 'Probing: AutoZero Touch', path: '/features/probing/#autozero-touch' },
+  'probe-3d': { label: 'Probing: 3D probe', path: '/features/probing/#3d-probe' },
+  'probe-tls': { label: 'Probing: tool length setter', path: '/features/probing/#tool-length-setter' },
+  'probe-connection': { label: 'Probing: connection test', path: '/features/probing/#connection-test' },
+  'tool-numbering': { label: 'Tool changer: tool numbering', path: '/features/tool-changer/#tool-numbering' },
+  'tool-buttons': { label: 'Tool changer: tool buttons', path: '/features/tool-changer/#tool-buttons' },
+  'tls-power': { label: 'Tool changer: measuring after power-up', path: '/features/tool-changer/#measuring-after-power-up' },
+  'tls-z0': { label: 'Tool changer: Z0 before or after TLS', path: '/features/tool-changer/#set-z0-before-or-after-tls-both-work' },
+  'tool-library-slot': { label: 'Tool library: assigning a magazine slot', path: '/features/tool-library/#assigning-a-tool-to-a-magazine-slot' },
+  'tool-library-probe': { label: 'Tool library: probe slot', path: '/features/tool-library/#probe-slot' },
+  'manual-tc': { label: 'Manual Tool Changer plugin', path: '/plugins/manual-tool-changer/' },
+  'rapid-change': { label: 'Rapid Change ATC plugin', path: '/plugins/rapid-change-atc/' },
+  'pneumatic-atc': { label: 'Pneumatic ATC plugin', path: '/plugins/pneumatic-atc/' },
+  'faq-probe-signal': { label: 'FAQ: the probe or tool setter shows no signal', path: '/faq/#the-probe-or-tool-setter-shows-no-signal' }
 };
 
 var CT_LEVELS = [
@@ -672,6 +760,7 @@ var CT_LEVELS = [
   { id: 3, title: 'Zero' },
   { id: 4, title: 'Running a program' },
   { id: 5, title: 'Cutting well' },
+  { id: 6, title: 'Probing and tool changes' },
   { id: 99, title: 'Your first part', capstone: true }
 ];
 
@@ -748,14 +837,14 @@ var CT_LESSONS = [
   { id: 'jogging', level: 2, title: 'Jogging', mins: 5, fig: 'jog',
     body:
       '<p><strong>Jogging</strong> is moving the machine by hand from ncSender, to put the bit where you want it: over a corner of the stock, down to touch its top, out of the way.</p>' +
-      '<ul><li><strong>Step jog:</strong> each press moves exactly one step, like 10, 1 or 0.1 mm. Use big steps to travel and small ones as you get close.</li>' +
+      '<ul><li><strong>Step jog:</strong> each press moves exactly one step, {like 10, 1 or 0.1 mm|like 0.1, 0.01 or 0.001 in}. Use big steps to travel and small ones as you get close.</li>' +
       '<li><strong>Continuous jog:</strong> hold the button (or key) and the axis moves until you let go. Fast for long moves, risky near the work.</li>' +
       '<li><strong>Jog feed</strong> is how fast it moves. Slow down near the stock.</li>' +
       '<li>You can also jog from the keyboard, a gamepad or the ncSender pendant.</li></ul>' +
-      '<p>Near the stock, always use small steps going down in Z. A 10 mm step at the wrong moment drives the bit into the work or the table.</p>',
+      '<p>Near the stock, always use small steps going down in Z. A {10 mm|0.5 in} step at the wrong moment drives the bit into the work or the table.</p>',
     tryIt: { check: 'jogSizes', text: 'Pick a step size and jog any axis once. Then do the same with two other step sizes. Watch how far each one goes.' },
     quiz: [
-      { q: 'The bit is 3 mm above the stock and you want to touch it. Which step?', a: ['10 mm', '1 mm, then 0.1 mm', 'Continuous jog down'], right: 1, why: 'Close to the work, small steps can’t overshoot.' }
+      { q: 'The bit is {3 mm|1/8 in} above the stock and you want to touch it. Which step?', a: ['{10 mm|0.5 in}', '{1 mm, then 0.1 mm|0.01 in, then 0.001 in}', 'Continuous jog down'], right: 1, why: 'Close to the work, small steps can’t overshoot.' }
     ],
     docs: ['jog-steps', 'jog-continuous', 'jog-feeds', 'jog-keys', 'gamepad', 'pendant'] },
 
@@ -780,7 +869,7 @@ var CT_LESSONS = [
       '<p>The table below is your machine’s six offsets right now, in machine coordinates.</p>',
     tryIt: { check: 'workspace', optional: true, text: 'Switch to another work offset in ncSender (for example G55), see the DRO’s numbers change while the machine doesn’t move, then switch back.' },
     quiz: [
-      { q: 'You moved the stock 50 mm to the right. What changes?', a: ['The program', 'The work offset: zero it again on the stock', 'The machine coordinates of home'], right: 1,
+      { q: 'You moved the stock {50 mm|2 in} to the right. What changes?', a: ['The program', 'The work offset: zero it again on the stock', 'The machine coordinates of home'], right: 1,
         why: 'The program is written from the stock’s corner. Zero again on the corner and the same program cuts in the new place.' },
       { q: 'A program doesn’t name a work offset. Which one does it use?', a: ['Always G54', 'Whichever is active in the controller now', 'Machine coordinates'], right: 1,
         why: 'The controller starts in G54, but it keeps whichever was selected last. Check the work offset ncSender shows before you run.' }
@@ -802,14 +891,14 @@ var CT_LESSONS = [
 
   { id: 'zero-z', level: 3, title: 'Zero Z', mins: 5, fig: 'zzero',
     body:
-      '<p>Z0 is usually the <strong>top of the stock</strong>: a 3 mm deep pocket then goes to Z−3. Some programs use the <strong>spoilboard</strong> (the bottom of the stock) instead, so a cut through always stops at the same place. The program and the zero must agree.</p>' +
-      '<ul><li><strong>Paper method:</strong> with the spindle off, slide a sheet of paper under the bit and lower it in 0.1 mm steps until the paper just drags. The paper is about 0.1 mm thick, so set Z to 0.1 there (or zero it and accept 0.1 mm).</li>' +
+      '<p>Z0 is usually the <strong>top of the stock</strong>: a {3 mm|1/8 in} deep pocket then goes to {Z−3|Z−0.125}. Some programs use the <strong>spoilboard</strong> (the bottom of the stock) instead, so a cut through always stops at the same place. The program and the zero must agree.</p>' +
+      '<ul><li><strong>Paper method:</strong> with the spindle off, slide a sheet of paper under the bit and lower it in {0.1 mm|0.001 in} steps until the paper just drags. The paper is about {0.1 mm thick, so set Z to 0.1|0.004 in thick, so set Z to 0.004} there (or zero it and accept {0.1 mm|0.004 in}).</li>' +
       '<li><strong>Touch plate:</strong> lay the plate on the stock, clip the magnet to the bit, and <strong>test the circuit first</strong>: touch the plate to the bit and see ncSender’s probe signal change. If it doesn’t, the bit would drive into the plate. Then probe: ncSender lowers until the bit touches and subtracts the plate’s thickness. Put the clip and plate away before the spindle starts.</li></ul>' +
       '<p>Never zero Z with the spindle running, and keep the bit clean: a chip under the tip makes every cut shallower.</p>',
     tryIt: { check: 'zeroZ', text: 'Lower the bit onto a piece of scrap (paper method or touch plate) and zero Z in ncSender. Then lift a few millimeters.' },
     quiz: [
-      { q: 'Z0 is the top of 6 mm stock. To cut a part out cleanly, the last pass should go to…', a: ['Z−6 exactly', 'A little past it, like Z−6.2', 'Z−12, to be sure'], right: 1,
-        why: 'At exactly Z−6 a thin skin of fibers often stays at the bottom. A little past it cuts cleanly into the spoilboard, which is what the spoilboard is for.' }
+      { q: 'Z0 is the top of {6 mm|1/4 in} stock. To cut a part out cleanly, the last pass should go to…', a: ['{Z−6|Z−0.25} exactly', 'A little past it, like {Z−6.2|Z−0.26}', '{Z−12|Z−0.5}, to be sure'], right: 1,
+        why: 'At exactly {Z−6|Z−0.25} a thin skin of fibers often stays at the bottom. A little past it cuts cleanly into the spoilboard, which is what the spoilboard is for.' }
     ],
     docs: ['zero-axis', 'probe-block', 'probe-types'] },
 
@@ -850,9 +939,9 @@ var CT_LESSONS = [
       '<li><strong>The depth</strong> in the side view: no deeper than the stock, unless you mean to cut through.</li>' +
       '<li><strong>The out-of-bounds warning:</strong> ncSender warns when the program would go past the machine’s travel from the current zero.</li>' +
       '<li>The bit and the run time in the header make sense.</li></ul>',
-    tryIt: { check: 'loadSample', button: 'load', text: 'Load the practice program. It only loads: nothing moves until you press Start. Close the tutor and find its origin, its 40 × 30 mm rectangle and its depth in the visualizer.' },
+    tryIt: { check: 'loadSample', button: 'load', text: 'Load the practice program. It only loads: nothing moves until you press Start. Close the tutor and find its origin, its {40 × 30 mm|1.5 × 1.25 in} rectangle and its depth in the visualizer.' },
     quiz: [
-      { q: 'In the side view, the path goes 10 mm below the stock’s bottom. What now?', a: ['Run it, the spoilboard will take it', 'Stop: the depth or the Z zero is wrong'], right: 1, why: 'A through cut goes a fraction of a millimeter into the spoilboard, not 10 mm. Something is set wrong.' }
+      { q: 'In the side view, the path goes {10 mm|1/2 in} below the stock’s bottom. What now?', a: ['Run it, the spoilboard will take it', 'Stop: the depth or the Z zero is wrong'], right: 1, why: 'A through cut goes {a fraction of a millimeter|a few thousandths} into the spoilboard, not {10 mm|1/2 in}. Something is set wrong.' }
     ],
     docs: ['load', 'view', 'out-of-bounds'] },
 
@@ -860,14 +949,14 @@ var CT_LESSONS = [
     body:
       '<p>An <strong>air cut</strong> runs the program with the bit above the stock, so you can watch the whole path without cutting anything. It’s the best way to catch a clamp in the way, a wrong zero or a surprise move.</p>' +
       '<ol><li>Zero X, Y and Z as you will for the real cut.</li>' +
-      '<li>Jog Z <strong>up 25 mm</strong> and zero Z there. Now the program’s Z0 is 25 mm above the stock, so every cut happens in the air. Its safe heights go up 25 mm too: check Z has that much room above, or you’ll get a soft limit alarm.</li>' +
+      '<li>Jog Z <strong>up {25 mm|1 in}</strong> and zero Z there. Now the program’s Z0 is {25 mm|1 in} above the stock, so every cut happens in the air. Its safe heights go up {25 mm|1 in} too: check Z has that much room above, or you’ll get a soft limit alarm.</li>' +
       '<li>Run the program and watch (the spindle turns on as usual; on a router with its own switch you can leave it off): does it stay over the stock and away from the clamps?</li>' +
-      '<li>When it ends, lower Z back onto the stock and <strong>zero Z again</strong> before the real cut. Forgetting this is the classic mistake: the real cut then happens 25 mm in the air.</li></ol>' +
+      '<li>When it ends, lower Z back onto the stock and <strong>zero Z again</strong> before the real cut. Forgetting this is the classic mistake: the real cut then happens {25 mm|1 in} in the air.</li></ol>' +
       '<p>For the practice program, use a piece of scrap or no stock at all.</p>',
-    tryIt: { check: 'airCut', text: 'Load the practice program (Check before you cut), raise Z0 25 mm as above, then run it and watch it to the end. Lower Z and rezero after.' },
+    tryIt: { check: 'airCut', text: 'Load the practice program (Check before you cut), raise Z0 {25 mm|1 in} as above, then run it and watch it to the end. Lower Z and rezero after.' },
     ticks: ['After the air cut, I put Z0 back on the stock'],
     quiz: [
-      { q: 'The air cut is done. Before the real cut you must…', a: ['Press Start', 'Lower the bit and zero Z on the stock again'], right: 1, why: 'Z0 is still 25 mm in the air from the air cut.' }
+      { q: 'The air cut is done. Before the real cut you must…', a: ['Press Start', 'Lower the bit and zero Z on the stock again'], right: 1, why: 'Z0 is still {25 mm|1 in} in the air from the air cut.' }
     ],
     docs: ['run', 'zero-axis'] },
 
@@ -909,7 +998,7 @@ var CT_LESSONS = [
       '<p>Start from the table below (the same starting points QuickCut, Gears and Spoilboard Toolbox use), make a test cut, then adjust by listening and looking at the chips. To go faster, raise the feed and keep the RPM: bigger chips carry the heat away.</p>',
     quiz: [
       { q: 'The cut makes fine dust and leaves burn marks. Most likely:', a: ['The chip load is too small: feed up or RPM down', 'The chip load is too big'], right: 0, why: 'Dust and heat mean the edge is rubbing. A thicker chip carries the heat away.' },
-      { q: 'At 18000 RPM, 2 flutes and 0.05 mm chip load, the feed is…', a: ['900 mm/min', '1800 mm/min', '3600 mm/min'], right: 1, why: '18000 × 2 × 0.05 = 1800 mm/min.' }
+      { q: 'At 18000 RPM, 2 flutes and {0.05 mm|0.002 in} chip load, the feed is…', a: ['{900 mm/min|36 in/min}', '{1800 mm/min|72 in/min}', '{3600 mm/min|144 in/min}'], right: 1, why: '18000 × 2 × {0.05 = 1800 mm/min|0.002 = 72 in/min}.' }
     ],
     docs: ['overrides', 'spindle'] },
 
@@ -921,7 +1010,7 @@ var CT_LESSONS = [
       '<li><strong>Roughing then finishing:</strong> take most of the material fast, then a light last pass for a clean wall and an exact size.</li></ul>' +
       '<p>A slot (the bit cutting with both sides, like the first pass of a profile) is the hardest work for a bit: go a little shallower there.</p>',
     quiz: [
-      { q: 'A 6 mm bit in hardwood. A sensible first depth per pass?', a: ['12 mm', 'About 2–3 mm', '0.1 mm'], right: 1, why: 'Around half the diameter or a bit less in hardwood. 0.1 mm rubs; 12 mm overloads it.' }
+      { q: 'A {6 mm|1/4 in} bit in hardwood. A sensible first depth per pass?', a: ['{12 mm|1/2 in}', 'About {2–3 mm|0.08–0.12 in}', '{0.1 mm|0.004 in}'], right: 1, why: 'Around half the diameter or a bit less in hardwood. {0.1 mm|0.004 in} rubs; {12 mm|1/2 in} overloads it.' }
     ],
     docs: [] },
 
@@ -950,6 +1039,102 @@ var CT_LESSONS = [
     ],
     docs: ['keepout'] },
 
+  // ---------- Level 6: probing and tool changes ----------
+  { id: 'collet', level: 6, title: 'Changing a bit: the collet', mins: 5, fig: 'collet',
+    body:
+      '<p>The bit is held by a <strong>collet</strong>: a slotted sleeve that squeezes the bit’s shank when the <strong>nut</strong> is tightened. Each collet fits one shank size (1/4", 1/8", 6 mm…). Spindles use ER collets; trim routers have their own.</p>' +
+      '<ol><li><strong>Spindle off.</strong> Unplug a router, or switch off the spindle, before your hands go near the bit.</li>' +
+      '<li><strong>Clean</strong> the collet, the nut and the taper inside the spindle: a chip in there makes the bit wobble (runout).</li>' +
+      '<li><strong>Snap the collet into the nut first</strong> (an ER collet clicks into place when pushed in at a slight angle). If it isn’t clicked in, it won’t grip evenly or let go later.</li>' +
+      '<li><strong>Put the bit in</strong> so most of the shank is gripped, with the flutes clear of the collet and the bit not touching the bottom. Less sticking out means less bending and chatter.</li>' +
+      '<li><strong>Tighten firmly</strong> with the two wrenches (or the spindle lock and one wrench). Firm, not with a cheater bar.</li></ol>' +
+      '<p><strong>Loosening:</strong> the nut turns easily, then gets tight again: that’s the nut pulling the collet out of the taper. Keep turning, and hold the bit so it doesn’t drop onto the work.</p>' +
+      '<p>Never tighten the nut with no bit in (it bends the collet), and replace a collet that’s worn or let a bit slip. After a bit change, Z0 needs measuring again: [[tool-length]].</p>',
+    ticks: ['The spindle is off (the router unplugged) when I change a bit', 'I snap the collet into the nut before the bit goes in'],
+    quiz: [
+      { q: 'Loosening the nut, it turns easily, then gets tight again. What’s happening?', a: ['It’s cross-threaded: stop', 'The nut is pulling the collet out of the taper: keep turning'], right: 1,
+        why: 'The second tight spot is the collet coming free of the taper. That’s normal; keep turning.' },
+      { q: 'How far does the bit go into the collet?', a: ['Just the end of the shank', 'Most of the shank, flutes clear of the collet, not touching the bottom', 'All the way, flutes inside the collet'], right: 1,
+        why: 'Gripping most of the shank holds it straight. Flutes in the collet can’t be gripped evenly; a bit on the bottom can’t seat.' }
+    ],
+    docs: ['tool-library'] },
+
+  { id: 'probe-circuit', level: 6, title: 'How a probe works', mins: 4, fig: 'probecircuit', live: 'probe',
+    body:
+      '<p>A touch plate, a 3D probe and a tool length setter all work the same way: a <strong>switch</strong>. For a touch plate, the clip on the bit and the metal plate are the two sides of the switch. When the bit touches the plate, the circuit closes, the controller stops at once and records exactly where it was.</p>' +
+      '<p>That’s more exact than paper, and the same every time. ncSender then works out the zero from that spot (taking off the plate’s thickness, for example).</p>' +
+      '<ul><li><strong>The danger:</strong> if the circuit can’t close (the clip fell off, a broken wire), nothing tells the controller to stop: the bit pushes into the plate until it reaches the probe distance and gives up with an alarm.</li>' +
+      '<li>So <strong>test it every time</strong>: touch the plate to the bit and watch the probe light in ncSender come on. ncSender can ask for this before each probe (the connection test).</li>' +
+      '<li>Spindle off while probing. Probing moves slowly; keep your hands clear anyway.</li></ul>',
+    tryIt: { check: 'probeSignal', text: 'With the spindle off and the clip on the bit, touch the plate to the bit by hand. The probe input should light up.' },
+    quiz: [
+      { q: 'You start a Z probe but the clip fell off the bit. What happens?', a: ['It stops when it touches anyway', 'Nothing closes the circuit: the bit pushes into the plate until the probe gives up with an alarm'], right: 1,
+        why: 'The controller only stops when the circuit closes. That’s why you test it first.' }
+    ],
+    docs: ['probe-connection', 'faq-probe-signal'] },
+
+  { id: 'touch-plate', level: 6, title: 'The touch plate', mins: 6, fig: 'touchplate', live: 'touchplate',
+    body:
+      '<p>A <strong>touch plate</strong> (a standard block) sits on the stock. Probing Z, the bit comes down onto its top; probing X and Y, the bit touches its inside walls from the side. ncSender takes off the plate’s thickness and the bit’s radius and sets the zero on the stock.</p>' +
+      '<ul><li><strong>Z thickness:</strong> the plate’s height. Measure it once with calipers and enter it exactly: any error goes straight into your depth.</li>' +
+      '<li><strong>XY thickness:</strong> how thick its walls are, for corner probing.</li>' +
+      '<li><strong>Bit diameter:</strong> for X and Y, the bit touches with its side, so its center is half a diameter away. Give the real diameter.</li>' +
+      '<li><strong>Corner:</strong> tell ncSender which corner of the stock the plate is on.</li>' +
+      '<li><strong>AutoZero Touch</strong> plates measure the bit for you and need almost no setup.</li></ul>' +
+      '<p>Start the bit over the plate, a few millimeters above it, and do the connection test. Afterwards, put the clip and the plate away before the spindle starts.</p>',
+    tryIt: { check: 'probeCycle', text: 'In ncSender, press Probe, pick your plate, and probe Z (or XYZ on a corner). Test the connection first.' },
+    quiz: [
+      { q: 'Your plate is {15 mm|0.6 in} thick. After probing Z, where is Z0?', a: ['On top of the plate', 'On top of the stock under it: ncSender takes off the {15 mm|0.6 in}'], right: 1,
+        why: 'ncSender subtracts the plate’s thickness, so Z0 lands on the stock.' },
+      { q: 'Why does X and Y probing need the bit’s diameter?', a: ['To pick the feed', 'The bit touches with its side, so its center is half a diameter from the wall'], right: 1,
+        why: 'The zero is the stock’s edge; the bit’s center stops a radius away from it.' }
+    ],
+    docs: ['probe-block', 'probe-autozero', 'probe-dialog'] },
+
+  { id: 'tls', level: 6, title: 'The tool length setter', mins: 6, fig: 'tls', live: 'tls', needs: 'tls',
+    body:
+      '<p>A <strong>tool length setter</strong> (TLS) is a switch fixed to the table. The machine brings each bit down onto it and records where the tip touched. The difference between two bits is their difference in length: the controller shifts Z by it, the <strong>tool length offset</strong>, so Z0 stays right after a bit change without zeroing on the stock again.</p>' +
+      '<ul><li>After power-on, the tool in the spindle must be measured once before it cuts: ncSender’s TLS button blinks red until it is.</li>' +
+      '<li>ncSender can measure right after homing (TLS after homing): the machine then moves to the setter by itself.</li>' +
+      '<li>Set Z0 before or after measuring: both work in ncSender.</li>' +
+      '<li>Every time a bit goes into the collet, even the same bit, measure it again.</li></ul>',
+    tryIt: { check: 'tlsMeasure', optional: true, text: 'Press and hold TLS in ncSender to measure the bit in the spindle. Keep clear: the machine moves on its own.' },
+    quiz: [
+      { q: 'After power-on, the TLS button blinks red. Why?', a: ['The setter is broken', 'The bit in the spindle hasn’t been measured since power-on'], right: 1,
+        why: 'The offset is lost at power-off; measure once before cutting.' },
+      { q: 'With a TLS, you change from a 1/4" bit to a 1/8" one. Do you zero Z on the stock again?', a: ['Yes, every time', 'No: measure the new bit on the TLS and Z0 stays right'], right: 1,
+        why: 'That’s the point of the setter: the offset makes up the difference in length.' }
+    ],
+    docs: ['tls', 'tls-power', 'tls-z0', 'probe-tls'] },
+
+  { id: 'tool-changes', level: 6, title: 'Tool changes and the ATC', mins: 7, fig: 'atc', live: 'atc', needs: 'atc',
+    body:
+      '<p>A program that uses several bits has <strong>tool changes</strong>: a line like <code>M6 T3</code> says “now tool 3”.</p>' +
+      '<ul><li><strong>By hand:</strong> the program pauses and ncSender asks for the tool. Change the bit ([[collet]]), measure it on the TLS or zero Z again, then carry on.</li>' +
+      '<li><strong>Automatic tool changer (ATC):</strong> the tools wait in a <strong>magazine</strong> on the table. The spindle goes to its tool’s slot, leaves the one it has, picks up the next, and measures it. A Rapid Change ATC spins the collet nut on and off with the spindle; a pneumatic one opens the spindle with air to drop a tool holder.</li>' +
+      '<li><strong>Which tool is T3?</strong> With Slot numbering, the tool in slot 3. With Tool ID numbering, the tool whose ID is 3, wherever it sits; a tool not in the magazine is changed by hand.</li>' +
+      '<li><strong>Safety:</strong> an ATC moves fast, on its own. Stay clear, and keep the magazine’s positions set right: a wrong slot position crashes the spindle into the rack.</li></ul>',
+    tryIt: { check: 'toolChange', optional: true, text: 'Hold a slot’s button in ncSender to change to that tool. Stay clear while it moves.' },
+    quiz: [
+      { q: 'During an automatic tool change, you…', a: ['Reach in to guide the tool', 'Stay clear: the machine moves fast on its own'], right: 1, why: 'An ATC doesn’t know your hand is there.' },
+      { q: 'With Tool ID numbering, M6 T3 loads…', a: ['The tool in slot 3', 'The tool with Tool ID 3, wherever it sits'], right: 1, why: 'Tool ID numbering keeps your CAM’s numbers even when tools move between slots.' }
+    ],
+    docs: ['tool-numbering', 'tool-buttons', 'tool-library-slot', 'manual-tc', 'rapid-change', 'pneumatic-atc'] },
+
+  { id: 'probe-3d', level: 6, title: 'The 3D probe', mins: 5, fig: 'probe3d', live: 'probe3d', needs: 'probe3d',
+    body:
+      '<p>A <strong>3D probe</strong> goes in the spindle like a bit. Its stylus, with a small ball on the end, is on a spring: when the ball touches something from any side, the stylus tips a little and the probe signals.</p>' +
+      '<ul><li>It finds an <strong>edge</strong>, a <strong>corner</strong>, the <strong>top</strong>, or the <strong>center</strong> of a hole or a round part, without a plate.</li>' +
+      '<li><strong>Ball diameter:</strong> ncSender allows for it. Calibrate it (probe a hole of known size): the stylus bends a little before it signals, so it acts slightly smaller than the ball.</li>' +
+      '<li>It’s a tool in the tool library (the probe slot); ncSender’s Probe button loads it.</li>' +
+      '<li><strong>Never turn the spindle on with the probe in.</strong> Check the program and the tool before pressing Start.</li></ul>',
+    quiz: [
+      { q: 'Can you run the spindle slowly with the 3D probe in?', a: ['Yes, at low RPM', 'Never: it wrecks the probe'], right: 1, why: 'The probe isn’t made to spin.' },
+      { q: 'Why calibrate the ball diameter?', a: ['It changes with temperature', 'The stylus bends a little before it signals, so it acts slightly smaller than the ball'], right: 1,
+        why: 'Calibrating measures the size it really acts as.' }
+    ],
+    docs: ['probe-3d', 'tool-library-probe'] },
+
   // ---------- Your first part ----------
   { id: 'first-part', level: 99, title: 'Your first part', mins: 30, fig: null,
     body:
@@ -958,12 +1143,12 @@ var CT_LESSONS = [
       { text: 'Safety glasses on, hearing protection, dust collection ready, E-stop in reach.', lesson: 'safety' },
       { text: 'Home the machine.', lesson: 'homing' },
       { text: 'Hold a piece of scrap down: clamps or tape and glue, clear of the middle.', lesson: 'workholding' },
-      { text: 'Put in a flat end bit, 3–6 mm.', lesson: 'bits' },
+      { text: 'Put in a flat end bit, {3–6 mm|1/8–1/4 in}.', lesson: 'bits' },
       { text: 'Zero X and Y on the scrap’s front-left corner.', lesson: 'zero-xy' },
       { text: 'Zero Z on the scrap’s top.', lesson: 'zero-z' },
-      { text: 'In QuickCut, make a rectangle pocket 40 × 30 mm, 2 mm deep, from the front-left corner, with your bit. Use its starting feeds.', lesson: 'feeds-speeds' },
+      { text: 'In QuickCut, make a rectangle pocket {40 × 30 mm, 2 mm|1.5 × 1.25 in, 0.08 in} deep, from the front-left corner, with your bit. Use its starting feeds.', lesson: 'feeds-speeds' },
       { text: 'Check it in the visualizer: origin, size, depth, clear of the clamps.', lesson: 'check' },
-      { text: 'Air cut it with Z0 raised 25 mm, then put Z0 back on the stock.', lesson: 'air-cut' },
+      { text: 'Air cut it with Z0 raised {25 mm|1 in}, then put Z0 back on the stock.', lesson: 'air-cut' },
       { text: 'Run it. Stay by the machine, listen, and watch the chips.', lesson: 'pause-stop' },
       { text: 'When the spindle has stopped, vacuum up and measure the pocket.', lesson: null }
     ],
@@ -976,6 +1161,8 @@ var CT_GLOSSARY = [
   ['Chip load', 'How thick a chip each cutting edge takes: feed ÷ (RPM × flutes).', 'feeds-speeds'],
   ['Climb milling', 'Each chip starts thick and ends thin; the bit pulls into the work.', 'climb-conventional'],
   ['Conventional milling', 'Each chip starts thin and ends thick; the bit pushes back.', 'climb-conventional'],
+  ['ATC', 'Automatic tool changer: a magazine of tools the spindle swaps by itself.', 'tool-changes'],
+  ['Collet', 'The slotted sleeve that grips the bit when its nut is tightened.', 'collet'],
   ['DRO', 'Digital readout: the position numbers in ncSender.', 'work-coordinates'],
   ['E-stop', 'The emergency stop button: stops the motors and, on most machines, the spindle.', 'safety'],
   ['Feed hold', 'A pause that stops on the path and keeps the program’s place.', 'pause-stop'],
@@ -988,6 +1175,7 @@ var CT_GLOSSARY = [
   ['Jog', 'Moving the machine by hand from ncSender.', 'jogging'],
   ['Machine coordinates', 'Positions measured from home (MPos).', 'homing'],
   ['Park', 'A spot you choose to move the spindle out of the way.', 'out-of-the-way'],
+  ['Probe', 'A switch the bit or stylus touches, so the controller records exactly where.', 'probe-circuit'],
   ['Rapid', 'A fast move that doesn’t cut (G0).', 'gcode'],
   ['Safe Z', 'A height to lift to before moving across.', 'out-of-the-way'],
   ['Soft limit', 'A travel limit in the controller’s settings, checked before moving.', 'limits'],
@@ -995,13 +1183,21 @@ var CT_GLOSSARY = [
   ['Stepdown', 'How much deeper each pass goes.', 'depth-stepover'],
   ['Stepover', 'How far over each row goes when clearing a pocket.', 'depth-stepover'],
   ['Tabs', 'Small bridges that hold a cut-out part in place.', 'workholding'],
+  ['TLS', 'Tool length setter: a switch on the table that measures each bit’s length.', 'tls'],
   ['Tool length offset', 'The Z shift for a bit’s length, from a tool length setter.', 'tool-length'],
+  ['Touch plate', 'A metal block the bit touches to find the zero.', 'touch-plate'],
   ['Work offset', 'Where work zero is, measured from home.', 'work-coordinates'],
   ['Work zero', 'X0 Y0 Z0 of a program, set on the stock.', 'work-coordinates']
 ];
 
+// "{25 mm|1 in}" in lesson text: the first in millimeters, the second in inches,
+// as ncSender is set. Natural values, not exact conversions.
+function ctUnits(text, units) {
+  return String(text == null ? '' : text).replace(/\{([^{}|]*)\|([^{}]*)\}/g, function(all, mm, inch) { return units === 'in' ? inch : mm; });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { CT_DOCS_BASE: CT_DOCS_BASE, CT_DOCS: CT_DOCS, CT_LEVELS: CT_LEVELS, CT_LESSONS: CT_LESSONS, CT_GLOSSARY: CT_GLOSSARY };
+  module.exports = { ctUnits: ctUnits, CT_DOCS_BASE: CT_DOCS_BASE, CT_DOCS: CT_DOCS, CT_LEVELS: CT_LEVELS, CT_LESSONS: CT_LESSONS, CT_GLOSSARY: CT_GLOSSARY };
 }
 /* END lib/tutor-lessons.cjs */
 
@@ -1122,7 +1318,8 @@ var CT_FIGS = {
       '</g>', 320, 194, 'Homing lifts Z, then moves to the home corner until the switches are pressed', 6.5);
   },
 
-  jog: function() {
+  jog: function(f) {
+    var inch = f && f.units === 'in';
     var D = 11, tips = [80, 100, 120, 140, 146, 152, 158, 164, 166, 168, 170], at = [.05, .13, .21, .32, .38, .44, .5, .6, .66, .72];
     var pts = [[0, 0]], times = [0];
     at.forEach(function(t, i) { pts.push([0, tips[i] - 80]); times.push(t); pts.push([0, tips[i + 1] - 80]); times.push(+(t + .03).toFixed(2)); });
@@ -1131,8 +1328,8 @@ var CT_FIGS = {
     return ctSvg(
       '<rect class="f-stock" x="40" y="170" width="240" height="32"/>' + ctText(270, 191, 'stock', 'f-stock-txt', 'end') +
       '<g>' + ctMove(pts, times, D) + ctSpindle(120, 80, 20) + '</g>' +
-      label(.03, .28, '10 mm steps: travel') + label(.3, .56, '1 mm steps: getting close') + label(.58, .88, '0.1 mm steps: touching') +
-      ctText(306, 66, 'one press, one step', 'f-txt', 'end'), 320, 208, 'Big steps to travel, then 1 mm and 0.1 mm steps to touch the stock', 8);
+      label(.03, .28, (inch ? '0.1 in' : '10 mm') + ' steps: travel') + label(.3, .56, (inch ? '0.01 in' : '1 mm') + ' steps: getting close') + label(.58, .88, (inch ? '0.001 in' : '0.1 mm') + ' steps: touching') +
+      ctText(306, 66, 'one press, one step', 'f-txt', 'end'), 320, 208, 'Big steps to travel, then small steps to touch the stock', 8);
   },
 
   safez: function() {
@@ -1193,7 +1390,7 @@ var CT_FIGS = {
       320, 184, 'Lower the bit onto paper until it just drags, then zero Z', 6);
   },
 
-  tlo: function() {
+  tlo: function(f) {
     var D = 10;
     function bit(len) {
       var flutes = '';
@@ -1206,22 +1403,22 @@ var CT_FIGS = {
       '<g>' + ctFade([1, 1, 0, 0, 1], [0, .44, .48, .96, 1], D) + bit(60) + ctText(182, 100, 'Z0 was set', 'f-txt') + ctText(182, 114, 'with this bit', 'f-txt') + '</g>' +
       '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .48, .52, .94, .98, 1], D) + bit(82) + '</g>' +
       '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .6, .64, .94, .98, 1], D) + '<rect class="f-danger" x="140" y="130" width="40" height="22"/>' +
-      ctText(182, 100, 'a longer bit,', 'f-bad-txt') + ctText(182, 114, 'same Z0', 'f-bad-txt') + ctText(160, 194, 'the longer bit cuts 22 mm too deep', 'f-bad-txt', 'middle') + '</g>' +
+      ctText(182, 100, 'a longer bit,', 'f-bad-txt') + ctText(182, 114, 'same Z0', 'f-bad-txt') + ctText(160, 194, 'the longer bit cuts ' + (f && f.units === 'in' ? '7/8 in' : '22 mm') + ' too deep', 'f-bad-txt', 'middle') + '</g>' +
       '<rect class="f-motor" x="148" y="20" width="24" height="42" rx="4"/><rect class="f-motor-band" x="148" y="30" width="24" height="5"/><path class="f-collet" d="M152 62h16l-3 8h-10z"/>',
       320, 202, 'A longer bit with the same Z0 cuts deeper', 8);
   },
 
-  aircut: function() {
+  aircut: function(f) {
     var D = 10;
     return ctSvg(
       '<rect class="f-stock" x="20" y="160" width="280" height="30"/>' +
       '<line class="f-dash" x1="20" y1="160" x2="300" y2="160"/>' + ctText(196, 154, 'real Z0: the stock top', 'f-txt') +
-      '<line class="f-acc" x1="20" y1="100" x2="300" y2="100"/>' + ctText(196, 94, 'air cut Z0', 'f-acc-txt') + ctText(196, 116, '25 mm up', 'f-acc-txt') +
+      '<line class="f-acc" x1="20" y1="100" x2="300" y2="100"/>' + ctText(196, 94, 'air cut Z0', 'f-acc-txt') + ctText(196, 116, (f && f.units === 'in' ? '1 in' : '25 mm') + ' up', 'f-acc-txt') +
       ctArrow(30, 158, 30, 104, 'f-z') +
       '<path class="f-path" d="M60 70V112H170V70"/>' + ctText(118, 140, 'the path runs in the air', 'f-txt', 'middle') +
       '<g>' + ctFade([1, 1, 0, 0, 1, 1], [0, .84, .88, .93, .97, 1], D) +
       ctMove([[0, 0], [0, 0], [0, 42], [110, 42], [110, 0], [110, 0], [0, 0], [0, 0]], [0, .08, .22, .6, .72, .88, .9, 1], D) + ctSpindle(60, 70, 16) + '</g>',
-      320, 196, 'An air cut: the program runs 25 mm above the stock', 4.5);
+      320, 196, 'An air cut: the program runs above the stock', 4.5);
   },
 
   bits: function() {
@@ -1310,6 +1507,96 @@ var CT_FIGS = {
       '<g><animateMotion path="' + path + '" dur="' + D + 's" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.9;1" calcMode="linear"/>' + ctBitTop(0, 0, 6, .4) + '</g>' +
       ctText(160, 112, 'the part', 'f-stock-txt', 'middle') + ctText(160, 196, 'clamps and screws clear of the path; tabs hold the part', 'f-txt', 'middle'),
       320, 202, 'Clamps clear of the path, tabs on the part', 8.5);
+  },
+  collet: function() {
+    var D = 12;
+    function step(t0, t1, text) { return '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, t0, t0 + .03, t1, t1 + .03, 1], D) + ctText(206, 120, text[0], 'f-acc-txt') + ctText(206, 136, text[1], 'f-txt') + '</g>'; }
+    var flutes = '';
+    for (var y = 108; y < 126; y += 6) flutes += '<line class="f-flute" x1="154" y1="' + (y + 4) + '" x2="166" y2="' + y + '"/>';
+    return ctSvg(
+      '<rect class="f-motor" x="128" y="6" width="64" height="50" rx="5"/><rect class="f-motor-band" x="128" y="18" width="64" height="6"/>' +
+      '<rect class="f-collet" x="142" y="56" width="36" height="14"/>' + ctText(124, 40, 'spindle', 'f-txt', 'end') +
+      '<g>' + ctMove([[0, 56], [0, 56], [0, 56], [0, 0], [0, 0], [0, 56]], [0, .45, .5, .64, .92, 1], D) +
+      '<g>' + ctMove([[0, -30], [0, -30], [0, 0], [0, 0], [0, -30]], [0, .04, .18, .92, 1], D) +
+      '<path class="f-collet" d="M144 60h32l-4 36h-24z"/><path class="f-line" d="M152 62v30M160 62v32M168 62v30"/></g>' +
+      '<rect class="f-nut" x="136" y="66" width="48" height="26" rx="3"/><path class="f-line" d="M148 66v26M172 66v26"/>' +
+      '<g>' + ctMove([[0, 46], [0, 46], [0, 46], [0, 0], [0, 0], [0, 46]], [0, .2, .25, .4, .92, 1], D) +
+      '<rect class="f-shank" x="154" y="72" width="12" height="36"/><path class="f-bit" d="M154 108h12v20l-6 4l-6 -4z"/>' + flutes + '</g>' +
+      '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .64, .67, .9, .93, 1], D) +
+      '<path class="f-acc" d="M196 70a40 14 0 0 1 -12 24"/>' + ctHead(190, 88, 184, 94, 'f-acc') + '</g>' +
+      '</g>' +
+      step(.02, .2, ['1. Snap the collet', 'into the nut']) + step(.22, .42, ['2. The bit in:', 'flutes clear of it']) + step(.47, .9, ['3. Thread it on and', 'tighten firmly']),
+      320, 240, 'The collet clicks into the nut, the bit goes in, and the nut is tightened on the spindle', 9);
+  },
+
+  probecircuit: function() {
+    var D = 8;
+    return ctSvg(
+      '<rect class="f-stock" x="20" y="158" width="200" height="30"/>' +
+      ctSpindle(110, 100, 20) +
+      '<rect class="f-clip" x="114" y="84" width="10" height="7" rx="2"/>' +
+      '<path class="f-wire" d="M124 87C170 80 200 70 236 62"/>' +
+      '<rect class="f-box" x="236" y="40" width="70" height="46" rx="6"/>' + ctText(271, 32, 'controller', 'f-txt', 'middle') +
+      '<circle class="f-led-off" cx="271" cy="63" r="9"/>' +
+      '<circle class="f-led-on" cx="271" cy="63" r="9" opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .34, .36, .62, .64, 1], D) + '</circle>' +
+      '<g>' + ctMove([[0, 0], [0, 0], [0, -50], [0, -50], [0, 0], [0, 0]], [0, .1, .35, .62, .82, 1], D) +
+      '<rect class="f-plate" x="88" y="150" width="44" height="8" rx="1"/>' + '<path class="f-wire" d="M132 154C190 160 240 120 252 86"/></g>' +
+      '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .34, .36, .62, .64, 1], D) + ctText(271, 128, 'touching:', 'f-acc-txt', 'middle') + ctText(271, 144, 'probe input on', 'f-acc-txt', 'middle') + '</g>' +
+      ctText(160, 206, 'the clip and the plate make a switch', 'f-txt', 'middle'),
+      320, 214, 'Touching the plate to the bit closes the circuit and lights the probe input', 3.8);
+  },
+
+  touchplate: function() {
+    var D = 12;
+    function step(t0, t1, text) { return '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, t0, t0 + .02, t1, t1 + .02, 1], D) + ctText(300, 30, text, 'f-acc-txt', 'end') + '</g>'; }
+    return ctSvg(
+      '<rect class="f-stock" x="60" y="44" width="220" height="126"/>' + ctText(270, 160, 'stock (seen from above)', 'f-stock-txt', 'end') +
+      '<rect class="f-plate" x="44" y="126" width="60" height="60" rx="2"/><path class="f-plate-lip" d="M44 126h6v54h54v6h-60z"/>' +
+      '<circle class="f-ring" cx="78" cy="152" r="8" opacity="0"><animate attributeName="r" values="18;8;8" keyTimes="0;.12;1" dur="' + D + 's" repeatCount="indefinite"/>' +
+      ctFade([0, 1, 1, 0, 0], [0, .02, .12, .14, 1], D) + '</circle>' +
+      '<g>' + ctMove([[0, 0], [0, 0], [-52, 4], [-42, 4], [-42, 4], [-4, 54], [-4, 42], [-4, 42], [0, 0], [0, 0]], [0, .14, .24, .32, .38, .48, .56, .9, .96, 1], D) + ctBitTop(78, 152, 8, .4) + '</g>' +
+      '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .6, .63, .9, .93, 1], D) + '<path class="f-zero" d="M44 170h32M60 154v32"/>' + ctText(300, 30, 'X0 Y0 Z0 on the stock’s corner', 'f-acc-txt', 'end') + '</g>' +
+      step(.0, .13, 'Z: down onto the top') + step(.2, .36, 'X: against its side') + step(.42, .58, 'Y: against its front'),
+      320, 214, 'Probing a touch plate on a corner: Z on the top, then X and Y on its sides', 7.5);
+  },
+
+  tls: function() {
+    var D = 10;
+    return ctSvg(
+      '<rect class="f-spoil" x="10" y="170" width="300" height="20"/>' +
+      '<rect class="f-tls" x="204" y="138" width="34" height="32" rx="3"/>' +
+      '<rect class="f-plunger" x="213" y="130" width="16" height="8" rx="1">' + ctMove([[0, 0], [0, 0], [0, 3], [0, 3], [0, 0], [0, 0]], [0, .5, .53, .7, .73, 1], D) + '</rect>' +
+      ctText(221, 206, 'tool length setter', 'f-txt', 'middle') +
+      '<g>' + ctMove([[0, 0], [0, 0], [131, 0], [131, 30], [131, 30], [131, 0], [0, 0], [0, 0]], [0, .06, .28, .5, .7, .78, .94, 1], D) + ctSpindle(90, 100, 26) + '</g>' +
+      '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .52, .55, .86, .9, 1], D) + ctText(16, 24, 'touched: its length is measured', 'f-acc-txt') + ctText(16, 40, 'and the tool offset set', 'f-acc-txt') + '</g>',
+      320, 214, 'The bit comes down onto the tool length setter, which measures its length', 6);
+  },
+
+  atc: function() {
+    var D = 12, slots = [70, 120, 170, 220];
+    function hold(i, values, times) { return '<circle class="f-toolhold" cx="' + slots[i] + '" cy="40" r="9"' + (values ? ' opacity="' + values[0] + '">' + ctFade(values, times, D) + '</circle>' : '/>'); }
+    function step(t0, t1, text) { return '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, t0, t0 + .02, t1, t1 + .02, 1], D) + ctText(160, 202, text, 'f-acc-txt', 'middle') + '</g>'; }
+    return ctSvg(
+      '<rect class="f-rack" x="40" y="24" width="210" height="10" rx="2"/>' + ctText(145, 16, 'magazine', 'f-txt', 'middle') +
+      slots.map(function(x, i) { return '<path class="f-fork" d="M' + (x - 12) + ' 34v14M' + (x + 12) + ' 34v14"/>' + ctText(x, 66, String(i + 1), 'f-txt', 'middle'); }).join('') +
+      hold(0) + hold(1, [0, 0, 1, 1, 0, 0], [0, .26, .27, .97, .98, 1]) + hold(2, [1, 1, 0, 0, 1, 1], [0, .45, .46, .97, .98, 1]) + hold(3) +
+      '<rect class="f-tls" x="252" y="128" width="24" height="24" rx="3"/>' + ctText(264, 170, 'TLS', 'f-txt', 'middle') +
+      '<g>' + ctMove([[0, 0], [0, 0], [-30, -100], [-30, -100], [20, -100], [20, -100], [114, 0], [114, 0], [0, 0], [0, 0]], [0, .05, .22, .3, .4, .48, .64, .88, .96, 1], D) +
+      '<circle class="f-spindle-top" cx="150" cy="140" r="14"/>' +
+      '<circle class="f-toolhold" cx="150" cy="140" r="9">' + ctFade([1, 1, 0, 0, 1, 1], [0, .26, .27, .45, .46, 1], D) + '</circle></g>' +
+      step(.04, .25, 'the spindle takes T2 back to slot 2') + step(.27, .46, 'leaves it, and picks up T3') + step(.48, .9, 'then measures T3 on the TLS'),
+      320, 212, 'An automatic tool changer swaps tools from its magazine, then measures the new one', 5.5);
+  },
+
+  probe3d: function() {
+    var D = 10;
+    return ctSvg(
+      '<rect class="f-stock" x="40" y="20" width="240" height="160"/>' + '<circle class="f-hole" cx="160" cy="100" r="40"/>' + ctText(270, 172, 'a hole, seen from above', 'f-stock-txt', 'end') +
+      '<g>' + ctMove([[0, 0], [0, 0], [43.7, 0], [-23.7, 0], [10, 0], [10, -39], [10, 29], [10, -5], [10, -5], [0, 0], [0, 0]], [0, .05, .15, .3, .36, .46, .6, .7, .92, .97, 1], D) +
+      '<circle class="f-ball" cx="150" cy="105" r="6"/></g>' +
+      '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .7, .73, .92, .95, 1], D) + '<path class="f-zero" d="M144 100h32M160 84v32"/>' + ctText(160, 154, 'center found', 'f-acc-txt', 'middle') + '</g>' +
+      ctText(160, 196, 'four touches; the center is halfway between', 'f-txt', 'middle'),
+      320, 204, 'A 3D probe finds a hole’s center by touching its four sides', 8);
   }
 };
 
@@ -1537,7 +1824,9 @@ if (typeof module !== 'undefined' && module.exports) {
   var st = { state: {}, fw: null, ncs: {}, facts: machineFacts(null, {}, {}), tracker: null, tryLesson: null, page: null, sid: null, ask: null, renaming: null };
   async function getJson(path) { var r = await fetch(BASE_URL + path); return r.ok ? r.json() : {}; }
   async function readAll() {
-    var r = await Promise.all([getJson('/api/firmware').catch(function() { return {}; }), getJson('/api/settings').catch(function() { return {}; }), getJson('/api/server-state').catch(function() { return {}; })]);
+    var r = await Promise.all([getJson('/api/firmware').catch(function() { return {}; }), getJson('/api/settings').catch(function() { return {}; }), getJson('/api/server-state').catch(function() { return {}; }),
+      getJson('/api/tools').catch(function() { return []; })]);
+    st.tools = Array.isArray(r[3]) ? r[3] : (r[3] && Array.isArray(r[3].tools) ? r[3].tools : []);
     st.fw = r[0]; st.ncs = r[1] || {};
     if (r[2] && r[2].machineState && !st.heard) st.state = r[2];
     st.facts = machineFacts(st.fw, st.ncs, st.state.machineState);
@@ -1560,6 +1849,7 @@ if (typeof module !== 'undefined' && module.exports) {
 
   // ---------- little helpers ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function U(text) { return ctUnits(text, st.facts.units); }
   function L(mm, dg) { return fmtLen(mm, st.facts.units, dg); }
   function lessonById(id) { for (var i = 0; i < CT_LESSONS.length; i++) if (CT_LESSONS[i].id === id) return CT_LESSONS[i]; return null; }
   function lessonIndex(id) { for (var i = 0; i < CT_LESSONS.length; i++) if (CT_LESSONS[i].id === id) return i; return -1; }
@@ -1713,10 +2003,12 @@ if (typeof module !== 'undefined' && module.exports) {
     h += '<span class="ct-crumb">' + (!lv.capstone ? 'Level ' + l.level + ': ' : '') + esc(lv.title) + ' · lesson ' + (i + 1) + ' of ' + CT_LESSONS.length + ' · about ' + l.mins + ' min</span>';
     h += '<h2 class="ct-h1">' + esc(l.title) + '</h2>';
     h += '<div class="ct-lesson"><div class="ct-col">';
-    h += '<div class="ct-body">' + xrefs(l.body) + '</div>';
+    var hw = l.needs ? hardware(l.needs) : null;
+    if (hw === false) h += '<p class="ct-warnbox">' + esc(NEEDS_NOTE[l.needs]) + '</p>';
+    h += '<div class="ct-body">' + xrefs(U(l.body)) + '</div>';
     if (l.live) h += '<div class="ct-card" data-live="' + l.live + '"></div>';
     if (l.steps) h += stepsCard(l);
-    if (l.tryIt) h += tryCard(l);
+    if (l.tryIt && hw !== false) h += tryCard(l);
     if (l.ticks) h += ticksCard(l);
     if (l.quiz) h += quizCard(l);
     h += '<div class="ct-actions ct-end">' + (i > 0 ? '<button type="button" class="ct-btn ct-ghost" data-go="' + CT_LESSONS[i - 1].id + '">← ' + esc(CT_LESSONS[i - 1].title) + '</button>' : '<span></span>') +
@@ -1730,24 +2022,24 @@ if (typeof module !== 'undefined' && module.exports) {
   function tryCard(l) {
     var t = l.tryIt, active = st.tryLesson === l.id && st.tracker;
     var h = '<div class="ct-card ct-try"><div class="ct-card-head"><h3 class="ct-h2">Try it' + (t.optional ? ' (optional)' : '') + '</h3></div>';
-    h += '<p>' + t.text + '</p>';
+    h += '<p>' + U(t.text) + '</p>';
     h += '<ul class="ct-checks" data-checks="' + l.id + '"></ul>';
     h += '<div class="ct-actions">';
     if (t.button === 'load') h += '<button type="button" class="ct-btn ct-ghost" id="ct-load-sample">Load the practice program</button>';
     h += '<button type="button" class="ct-btn" data-try="' + l.id + '">' + (active ? 'Keep watching' : 'Start: shrink the tutor and watch') + '</button><span class="ct-note" id="ct-try-note"></span></div>';
-    if (l.askAfter) h += '<div class="ct-q" data-ask="' + l.id + '" hidden><span class="ct-q-text">' + esc(l.askAfter.q) + '</span><div class="ct-actions"><button type="button" class="ct-btn ct-ghost" data-ask-yes>Yes</button><button type="button" class="ct-btn ct-ghost" data-ask-no>No</button></div><p class="ct-why" data-ask-why hidden></p></div>';
+    if (l.askAfter) h += '<div class="ct-q" data-ask="' + l.id + '" hidden><span class="ct-q-text">' + esc(U(l.askAfter.q)) + '</span><div class="ct-actions"><button type="button" class="ct-btn ct-ghost" data-ask-yes>Yes</button><button type="button" class="ct-btn ct-ghost" data-ask-no>No</button></div><p class="ct-why" data-ask-why hidden></p></div>';
     return h + '</div>';
   }
   function ticksCard(l) {
     var t = P.ticks[l.id] || {};
     return '<div class="ct-card"><h3 class="ct-h2">Check off</h3><div class="ct-ticks">' + l.ticks.map(function(text, k) {
-      return '<label class="ct-tick"><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + '>' + esc(text) + '</label>';
+      return '<label class="ct-tick"><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + '>' + esc(U(text)) + '</label>';
     }).join('') + '</div></div>';
   }
   function stepsCard(l) {
     var t = P.ticks[l.id] || {};
     return '<div class="ct-card"><h3 class="ct-h2">Step by step</h3><ul class="ct-steps">' + l.steps.map(function(s, k) {
-      return '<li><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + ' aria-label="Step ' + (k + 1) + ' done"><span>' + (k + 1) + '. ' + esc(s.text) +
+      return '<li><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + ' aria-label="Step ' + (k + 1) + ' done"><span>' + (k + 1) + '. ' + esc(U(s.text)) +
         (s.lesson ? ' <button type="button" class="ct-xref" data-go="' + s.lesson + '">' + esc(lessonById(s.lesson).title) + '</button>' : '') + '</span></li>';
     }).join('') + '</ul></div>';
   }
@@ -1755,10 +2047,10 @@ if (typeof module !== 'undefined' && module.exports) {
     var ans = P.answers[l.id] || {};
     return '<div class="ct-card"><h3 class="ct-h2">Check yourself</h3><div class="ct-quiz">' + l.quiz.map(function(q, qi) {
       var chosen = ans[qi];
-      return '<div class="ct-q"><span class="ct-q-text">' + esc(q.q) + '</span><div class="ct-opts">' + q.a.map(function(a, ai) {
+      return '<div class="ct-q"><span class="ct-q-text">' + esc(U(q.q)) + '</span><div class="ct-opts">' + q.a.map(function(a, ai) {
         var state = chosen == null ? '' : ai === q.right ? 'right' : ai === chosen ? 'wrong' : '';
-        return '<button type="button" class="ct-opt" data-quiz="' + l.id + ':' + qi + ':' + ai + '"' + (state ? ' data-state="' + state + '"' : '') + '>' + esc(a) + '</button>';
-      }).join('') + '</div>' + (chosen != null ? '<p class="ct-why">' + (chosen === q.right ? '<strong>Right.</strong> ' : '<strong>Not quite.</strong> ') + esc(q.why) + '</p>' : '') + '</div>';
+        return '<button type="button" class="ct-opt" data-quiz="' + l.id + ':' + qi + ':' + ai + '"' + (state ? ' data-state="' + state + '"' : '') + '>' + esc(U(a)) + '</button>';
+      }).join('') + '</div>' + (chosen != null ? '<p class="ct-why">' + (chosen === q.right ? '<strong>Right.</strong> ' : '<strong>Not quite.</strong> ') + esc(U(q.why)) + '</p>' : '') + '</div>';
     }).join('') + '</div></div>';
   }
 
@@ -1860,7 +2152,7 @@ if (typeof module !== 'undefined' && module.exports) {
     },
     gcode: function() {
       if (ROOT.querySelector('.ct-gcode')) return null;
-      return '<h3 class="ct-h2">The practice program</h3><div class="ct-gcode">' + practiceProgram().map(function(line) {
+      return '<h3 class="ct-h2">The practice program</h3><div class="ct-gcode">' + practiceProgram(st.facts.units).map(function(line) {
         var e = explainLine(line), code = esc(line.replace(/\s*\(.*\)\s*$/, '')), cmt = (line.match(/\(.*\)\s*$/) || [''])[0];
         var words = e.parts.length ? e.parts.join('; ') : 'A comment: the machine ignores it';
         return '<button type="button" class="ct-gline">' + code + (cmt ? ' <span class="ct-cmt">' + esc(cmt) + '</span>' : '') + '<span class="ct-explain">' + esc(words.charAt(0).toUpperCase() + words.slice(1)) + '.</span></button>';
@@ -1882,6 +2174,47 @@ if (typeof module !== 'undefined' && module.exports) {
         '<tr><th>Safe Z</th><td>' + (f.safeZ != null ? 'machine Z ' + L(f.safeZ) : 'not set') + '</td></tr>' +
         '<tr><th>Park</th><td>' + (f.park ? 'machine X ' + L(f.park.x) + ', Y ' + L(f.park.y) + ', Z ' + L(f.park.z) : 'not set') + '</td></tr></table>';
     },
+    probe: function() {
+      var m = ms(), pn = String(m.Pn || ''), pr = st.ncs.probe || {};
+      return '<h3 class="ct-h2">Your machine, live</h3><table class="ct-facts">' +
+        '<tr><th>Probe input (P)</th><td>' + (m.connected ? (pn.indexOf('P') >= 0 ? '<strong>on: touching</strong>' : 'off') : 'not connected') + '</td></tr>' +
+        '<tr><th>Tool setter input (T)</th><td>' + (m.connected ? (pn.indexOf('T') >= 0 ? '<strong>on: touching</strong>' : 'off') : 'not connected') + '</td></tr>' +
+        '<tr><th>Connection test before probing</th><td>' + (pr.requireConnectionTest ? 'Yes (ncSender asks for it)' : 'No') + '</td></tr></table>';
+    },
+    touchplate: function() {
+      var pr = st.ncs.probe || {}, type = pr.type || '', names = { 'standard-block': 'Standard block', 'autozero-touch': 'AutoZero Touch', '3d-probe': '3D probe', 'tool-length-setter': 'Tool length setter' };
+      var b = pr['standard-block'] || {}, h = '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Probe type picked in ncSender</th><td>' + esc(names[type] || type || 'not set yet') + '</td></tr>';
+      if (b.zThickness != null) h += '<tr><th>Standard block: Z thickness</th><td>' + L(Number(b.zThickness)) + '</td></tr><tr><th>Standard block: XY thickness</th><td>' + L(Number(b.xyThickness)) + '</td></tr>';
+      return h + '</table>';
+    },
+    tls: function() {
+      var t = toolSettings() || {}, m = ms();
+      return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Tool length setter</th><td>' + (toolSettings() ? (t.tls ? 'On in ncSender' : 'Off in ncSender') : 'not known') + '</td></tr>' +
+        '<tr><th>Measure after homing</th><td>' + (st.facts.tlsAfterHome ? 'Yes' : 'No') + '</td></tr>' +
+        '<tr><th>Tool in the spindle</th><td>' + (m.tool != null && m.tool !== '' ? 'T' + esc(m.tool) + (m.toolLengthSet ? ', measured' : ', not measured since it went in') : 'not known') + '</td></tr></table>';
+    },
+    atc: function() {
+      var t = toolSettings(), m = ms();
+      if (!t) return '<p class="ct-sub">ncSender’s tool changer settings aren’t known yet.</p>';
+      var inSlots = (st.tools || []).filter(function(x) { return x.toolNumber != null; }).sort(function(a, b) { return a.toolNumber - b.toolNumber; });
+      var h = '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Tool changer</th><td>' + esc(CHANGERS[t.source] || (t.source ? t.source : 'none: tool changes by hand')) + '</td></tr>' +
+        '<tr><th>Magazine slots</th><td>' + (t.count || 0) + '</td></tr>' +
+        '<tr><th>Tool numbering</th><td>' + (t.numbering === 'toolId' ? 'Tool ID' : 'Slot') + '</td></tr>' +
+        '<tr><th>Tool in the spindle</th><td>' + (m.tool != null && m.tool !== '' ? 'T' + esc(m.tool) : 'not known') + '</td></tr></table>';
+      if (inSlots.length) h += '<p class="ct-sub">In the magazine:</p><ul class="ct-steps">' + inSlots.slice(0, 12).map(function(x) {
+        return '<li><span class="ct-mono">Slot ' + esc(x.toolNumber) + '</span>&nbsp; <span title="' + esc(x.name) + '">' + esc(shortName(x.name)) + '</span></li>';
+      }).join('') + '</ul>';
+      return h;
+    },
+    probe3d: function() {
+      var t = toolSettings() || {}, probes = (st.tools || []).filter(function(x) { return x.type === 'probe'; });
+      return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Probe button in ncSender</th><td>' + (toolSettings() ? (t.probe ? 'On' : 'Off') : 'not known') + '</td></tr>' +
+        '<tr><th>Probe tools in the library</th><td>' + (probes.length ? probes.map(function(x) { return esc(shortName(x.name)); }).join(', ') : 'none') + '</td></tr></table>';
+    },
     where: function() { return '<ul class="ct-steps">' + whereAmI(st.state, st.facts).map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>'; }
   };
   function renderLive() {
@@ -1893,6 +2226,24 @@ if (typeof module !== 'undefined' && module.exports) {
     renderChecks();
     updateFeedsOnce();
   }
+
+  // What this machine has set up in ncSender, for the optional lessons: true, false, or null (not known yet).
+  var CHANGERS = { 'com.ncsender.rapidchangeatc': 'Rapid Change ATC', 'com.ncsender.pneumaticatc': 'Pneumatic ATC', 'com.ncsender.manualtoolchange': 'Manual Tool Changer' };
+  var NEEDS_NOTE = {
+    tls: 'Optional on this machine: ncSender doesn’t have a tool length setter turned on (Settings › Tool Changer). Read on to see what one does; until you have one, zero Z on the stock after every bit change.',
+    atc: 'Optional on this machine: no automatic tool changer is set up in ncSender, so tool changes are by hand. The first part of this lesson still applies.',
+    probe3d: 'Optional on this machine: no 3D probe is set up in ncSender (no probe tool in the library and the Probe button is off). Read on to see what one does.'
+  };
+  function toolSettings() { return st.ncs && st.ncs.tool && typeof st.ncs.tool === 'object' ? st.ncs.tool : null; }
+  function hardware(need) {
+    var t = toolSettings();
+    if (!t) return null;
+    if (need === 'tls') return !!t.tls;
+    if (need === 'atc') return /atc/i.test(String(t.source || ''));
+    if (need === 'probe3d') return !!t.probe || (st.tools || []).some(function(x) { return x.type === 'probe'; }) || (st.ncs.probe && st.ncs.probe.type === '3d-probe');
+    return null;
+  }
+  function shortName(n) { n = String(n || ''); return n.length > 48 ? n.slice(0, 46) + '…' : n; }
 
   // The table seen from above: the bed, home, the spindle and the active zero.
   function axisRange(k) {
@@ -1954,7 +2305,7 @@ if (typeof module !== 'undefined' && module.exports) {
     $('ct-f-out').textContent = 'Feed = ' + Math.round(rpm) + ' × ' + Math.round(flutes) + ' × ' + (inch ? (chipMm / 25.4).toFixed(4) + ' in' : chipMm.toFixed(3) + ' mm') + ' = ' + fmtFeed(feed, st.facts.units);
     $('ct-f-start').textContent = 'Starting point for ' + MATERIAL_NAMES[mat] + ' with this bit: ' + s.rpm + ' RPM, chip ' + (inch ? (s.chipMm / 25.4).toFixed(4) + ' in' : s.chipMm.toFixed(3) + ' mm') +
       ', feed ' + fmtFeed(s.feedMm, st.facts.units) + (s.capped ? ' (held to your machine’s limit)' : '') + ', plunge ' + fmtFeed(s.plungeMm, st.facts.units) + ', depth per pass ' + L(s.stepMm) + ', stepover ' + s.stepoverPct + ' %.' +
-      (feed > 4000 ? ' Over 4000 mm/min is a lot for most hobby machines: check the bit maker’s numbers.' : '');
+      (feed > 4000 ? ' Over ' + fmtFeed(4000, st.facts.units) + ' is a lot for most hobby machines: check the bit maker’s numbers.' : '');
   }
 
   // ---------- Try it ----------
@@ -1986,7 +2337,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!ms().connected) { var n = $('ct-try-note'); if (n) { n.setAttribute('data-state', 'warn'); n.textContent = 'ncSender isn’t connected to the controller.'; } return; }
     if (st.tryLesson !== id || !st.tracker) { st.tracker = startTracker(st.state); st.tryLesson = id; keepTry(); }
     $('ct-mini-title').textContent = 'Try it · ' + l.title;
-    $('ct-mini-text').innerHTML = l.tryIt.text;
+    $('ct-mini-text').innerHTML = U(l.tryIt.text);
     setMini(true);
     renderChecks();
   }
@@ -2019,7 +2370,7 @@ if (typeof module !== 'undefined' && module.exports) {
     note.removeAttribute('data-state'); note.textContent = 'Loading…';
     try {
       var res = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: CT_SAMPLE_NAME, content: practiceProgram().join('\n') + '\n' }) });
+        body: JSON.stringify({ filename: CT_SAMPLE_NAME, content: practiceProgram(st.facts.units).join('\n') + '\n' }) });
       if (!res.ok) throw new Error('ncSender answered ' + res.status);
       note.setAttribute('data-state', 'ok'); note.textContent = 'Loaded. Nothing moves until you press Start.';
     } catch (e) {
@@ -2083,7 +2434,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (t.hasAttribute('data-ask-yes') || t.hasAttribute('data-ask-no')) {
       var box = t.closest('[data-ask]'), why = box.querySelector('[data-ask-why]'), lsn = lessonById(box.getAttribute('data-ask'));
       why.hidden = false;
-      why.innerHTML = t.hasAttribute('data-ask-yes') ? '<strong>Good:</strong> your axes are set the right way round.' : esc(lsn.askAfter.no);
+      why.innerHTML = t.hasAttribute('data-ask-yes') ? '<strong>Good:</strong> your axes are set the right way round.' : esc(U(lsn.askAfter.no));
       return;
     }
     if (t.classList.contains('ct-gline')) { t.classList.toggle('open'); return; }

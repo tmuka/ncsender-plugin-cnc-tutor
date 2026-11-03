@@ -5,7 +5,8 @@ const { CHECKS } = require('../lib/tutor-machine.cjs');
 const { CT_FIGS, figure } = require('../lib/tutor-figures.cjs');
 
 const ids = CT_LESSONS.map((l) => l.id);
-const LIVE = ['axes', 'homing', 'limits', 'safe', 'offsets', 'zeromap', 'tool', 'gcode', 'feeds'];
+const LIVE = ['axes', 'homing', 'limits', 'safe', 'offsets', 'zeromap', 'tool', 'gcode', 'feeds', 'probe', 'touchplate', 'tls', 'atc', 'probe3d'];
+const NEEDS = ['tls', 'atc', 'probe3d'];
 
 test('lessons have unique ids, a level, a title and a body', () => {
   assert.strictEqual(new Set(ids).size, ids.length);
@@ -15,6 +16,7 @@ test('lessons have unique ids, a level, a title and a body', () => {
     if (l.live) assert.ok(LIVE.includes(l.live), l.id + ' live ' + l.live);
     if (l.fig) assert.ok(CT_FIGS[l.fig], l.id + ' fig ' + l.fig);
     if (l.tryIt) assert.ok(CHECKS[l.tryIt.check], l.id + ' check ' + l.tryIt.check);
+    if (l.needs) assert.ok(NEEDS.includes(l.needs), l.id + ' needs ' + l.needs);
     for (const d of l.docs || []) assert.ok(CT_DOCS[d], l.id + ' doc ' + d);
     for (const s of l.steps || []) assert.ok(s.lesson === null || ids.includes(s.lesson), l.id + ' step ' + s.lesson);
   }
@@ -76,5 +78,15 @@ test('figure animations are well formed and have a still frame', () => {
       if (values) assert.strictEqual(values[1].split(';').length, t.length, name + ' values vs keyTimes');
       if (splines) assert.strictEqual(splines[1].split(';').length, t.length - 1, name + ' keySplines');
     }
+  }
+});
+
+test('unit pairs: every {mm|in} renders with no braces left, either way', () => {
+  const { ctUnits } = require('../lib/tutor-lessons.cjs');
+  assert.strictEqual(ctUnits('up {25 mm|1 in}', 'in'), 'up 1 in');
+  assert.strictEqual(ctUnits('up {25 mm|1 in}', 'mm'), 'up 25 mm');
+  for (const l of CT_LESSONS) {
+    const texts = [l.body, l.tryIt && l.tryIt.text, ...(l.ticks || []), ...(l.steps || []).map((s) => s.text), ...(l.quiz || []).flatMap((q) => [q.q, q.why, ...q.a])].filter(Boolean);
+    for (const t of texts) for (const u of ['mm', 'in']) assert.ok(!/[{}|]/.test(ctUnits(t, u)), l.id + ': ' + t.slice(0, 60));
   }
 });

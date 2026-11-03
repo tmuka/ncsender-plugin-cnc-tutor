@@ -167,3 +167,36 @@ test('a state without positions or a workspace does not throw', () => {
   for (const id of Object.keys(M.CHECKS)) M.runCheck(id, tr, { units: 'in' });
   assert.ok(M.whereAmI({ machineState: { connected: true, status: 'Idle' } }, { units: 'in' }).length >= 2);
 });
+
+test('probeSignal: the probe input P seen', () => {
+  const tr = track(M.startTracker(state()), [state({ Pn: 'XP' })]);
+  assert.ok(M.runCheck('probeSignal', tr, {}).done);
+  assert.ok(!M.runCheck('probeSignal', track(M.startTracker(state()), [state({ Pn: 'T' })]), {}).done);
+});
+
+test('probeCycle: a probe that ends without an alarm and moves the zero', () => {
+  let tr = track(M.startTracker(state()), [state({ isProbing: true, status: 'Run' }), state({ isProbing: false, g54: '100,50,-30,0' })]);
+  assert.ok(M.runCheck('probeCycle', tr, { units: 'mm' }).done);
+  tr = track(M.startTracker(state()), [state({ isProbing: true }), state({ isProbing: false, status: 'Alarm:5' })]);
+  const r = M.runCheck('probeCycle', tr, { units: 'mm' });
+  assert.ok(!r.done);
+  assert.match(r.items[0].detail, /alarm/);
+  tr = track(M.startTracker(state()), [state({ isProbing: true }), state({ isProbing: false })]);
+  assert.ok(!M.runCheck('probeCycle', tr, {}).done, 'no zero change');
+});
+
+test('tlsMeasure: the setter touched, or the length newly set', () => {
+  let tr = track(M.startTracker(state({ toolLengthSet: true })), [state({ Pn: 'T' }), state({ toolLengthSet: true })]);
+  assert.ok(M.runCheck('tlsMeasure', tr, {}).done);
+  tr = track(M.startTracker(state({ toolLengthSet: false })), [state({ toolLengthSet: true })]);
+  assert.ok(M.runCheck('tlsMeasure', tr, {}).done);
+  tr = track(M.startTracker(state({ toolLengthSet: true })), [state({ toolLengthSet: true })]);
+  assert.ok(!M.runCheck('tlsMeasure', tr, {}).done, 'already measured, nothing done');
+});
+
+test('toolChange: a change that ends with another tool', () => {
+  let tr = track(M.startTracker(state({ tool: 4 })), [state({ isToolChanging: true, tool: 4 }), state({ isToolChanging: false, tool: 2 })]);
+  assert.ok(M.runCheck('toolChange', tr, {}).done);
+  tr = track(M.startTracker(state({ tool: 4 })), [state({ isToolChanging: true }), state({ isToolChanging: false, tool: 4 })]);
+  assert.ok(!M.runCheck('toolChange', tr, {}).done);
+});

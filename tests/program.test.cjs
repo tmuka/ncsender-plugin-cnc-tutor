@@ -20,13 +20,13 @@ function run(lines) {
     if (w.F) s.feed = w.F[0];
     const moves = 'XYZ'.split('').some((a) => w[a]) && !(w.G || []).includes(4);
     if (moves) {
-      assert.ok(s.units === 21 && s.abs === true, 'units and G90 set before moving');
+      assert.ok((s.units === 21 || s.units === 20) && s.abs === true, 'units and G90 set before moving');
       const to = { x: w.X ? w.X[0] : s.x, y: w.Y ? w.Y[0] : s.y, z: w.Z ? w.Z[0] : s.z };
       if (s.mode === 0) assert.ok(!(to.z < 0 || (s.z < 0 && (to.x !== s.x || to.y !== s.y))), 'no rapid in the stock: ' + raw);
       else {
         assert.ok(s.spindle, 'spindle on before cutting: ' + raw);
         assert.ok(s.feed > 0, 'a feed: ' + raw);
-        assert.ok(to.z >= -0.5, 'no deeper than 0.5 mm: ' + raw);
+        assert.ok(to.z >= (s.units === 20 ? -0.02 : -0.5), 'no deeper than 0.5 mm or 0.02 in: ' + raw);
       }
       Object.assign(s, to);
     }
@@ -34,22 +34,25 @@ function run(lines) {
   return s;
 }
 
-test('the practice program cuts safely and ends', () => {
-  const s = run(practiceProgram());
-  assert.strictEqual(s.spindle, false);
-  assert.deepStrictEqual(s.events, ['end']);
-  assert.ok(s.z > 0);
-});
-
-test('the practice program stays inside 40 x 30 mm from X0 Y0', () => {
-  for (const l of practiceProgram()) {
-    const c = l.replace(/\([^)]*\)/g, '');
-    for (const m of c.matchAll(/([XY])(-?[\d.]+)/g)) {
-      const v = Number(m[2]);
-      assert.ok(v >= 0 && v <= (m[1] === 'X' ? 40 : 30), l);
+for (const [units, w, h, safe] of [['mm', 40, 30, 15], ['in', 1.5, 1.25, 0.6]]) {
+  test('the practice program in ' + units + ' cuts safely and ends', () => {
+    const p = practiceProgram(units);
+    assert.ok(p.some((l) => l.startsWith(units === 'in' ? 'G20' : 'G21')));
+    const s = run(p);
+    assert.strictEqual(s.spindle, false);
+    assert.deepStrictEqual(s.events, ['end']);
+    assert.ok(s.z >= safe, 'ends lifted clear');
+  });
+  test('the practice program in ' + units + ' stays inside its rectangle from X0 Y0', () => {
+    for (const l of practiceProgram(units)) {
+      const c = l.replace(/\([^)]*\)/g, '');
+      for (const m of c.matchAll(/([XY])(-?[\d.]+)/g)) {
+        const v = Number(m[2]);
+        assert.ok(v >= 0 && v <= (m[1] === 'X' ? w : h), l);
+      }
     }
-  }
-});
+  });
+}
 
 test('explainLine reads a line in words', () => {
   assert.deepStrictEqual(explainLine('G0 Z5 (lift)'), { code: 'G0 Z5', comment: 'lift', parts: ['Rapid move (G0): as fast as the machine goes, never for cutting', 'to Z5'] });
@@ -62,5 +65,5 @@ test('explainLine reads a line in words', () => {
 });
 
 test('every word in the practice program has a meaning', () => {
-  for (const l of practiceProgram()) for (const p of explainLine(l).parts) assert.ok(!/^[GM]\d/.test(p), l + ': ' + p);
+  for (const l of practiceProgram('mm').concat(practiceProgram('in'))) for (const p of explainLine(l).parts) assert.ok(!/^[GM]\d/.test(p), l + ': ' + p);
 });
