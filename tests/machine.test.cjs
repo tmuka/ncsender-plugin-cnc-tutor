@@ -171,7 +171,6 @@ test('a state without positions or a workspace does not throw', () => {
 test('probeSignal: the probe input P seen', () => {
   const tr = track(M.startTracker(state()), [state({ Pn: 'XP' })]);
   assert.ok(M.runCheck('probeSignal', tr, {}).done);
-  assert.ok(!M.runCheck('probeSignal', track(M.startTracker(state()), [state({ Pn: 'T' })]), {}).done);
 });
 
 test('probeCycle: a probe that ends without an alarm and moves the zero', () => {
@@ -199,4 +198,41 @@ test('toolChange: a change that ends with another tool', () => {
   assert.ok(M.runCheck('toolChange', tr, {}).done);
   tr = track(M.startTracker(state({ tool: 4 })), [state({ isToolChanging: true }), state({ isToolChanging: false, tool: 4 })]);
   assert.ok(!M.runCheck('toolChange', tr, {}).done);
+});
+
+test('probeSignal: P already on at the start only counts after it goes off', () => {
+  const tr = track(M.startTracker(state({ Pn: 'P' })), [state({ Pn: 'P' })]);
+  const r = M.runCheck('probeSignal', tr, {});
+  assert.ok(!r.done);
+  assert.match(r.items[0].detail, /on already/);
+  track(tr, [state({ Pn: '' }), state({ Pn: 'P' })]);
+  assert.ok(M.runCheck('probeSignal', tr, {}).done);
+  assert.ok(M.runCheck('probeSignal', track(M.startTracker(state()), [state({ Pn: 'T' })]), {}).done, 'a one-input machine may show T');
+});
+
+test('probeCycle: an alarm, then a good retry, counts; a late alarm is caught', () => {
+  const tr = track(M.startTracker(state()), [state({ isProbing: true }), state({ isProbing: false, status: 'Alarm:4' })]);
+  assert.ok(!M.runCheck('probeCycle', tr, {}).done);
+  track(tr, [state({ isProbing: true }), state({ isProbing: false, g54: '100,50,-30,0' })]);
+  assert.ok(M.runCheck('probeCycle', tr, {}).done);
+  const late = track(M.startTracker(state()), [state({ isProbing: true }), state({ isProbing: false, g54: '100,50,-30,0' }), state({ status: 'Alarm:5', g54: '100,50,-30,0' })]);
+  assert.ok(!M.runCheck('probeCycle', late, {}).done);
+});
+
+test('tlsMeasure: a TLS run as a tool change with the length already set', () => {
+  const tr = track(M.startTracker(state({ toolLengthSet: true })), [state({ isToolChanging: true, toolLengthSet: true }), state({ isToolChanging: false, toolLengthSet: true })]);
+  assert.ok(M.runCheck('tlsMeasure', tr, {}).done);
+});
+
+test('toolChange: to tool 0 is not a new tool; numbers and strings compare alike', () => {
+  let tr = track(M.startTracker(state({ tool: 4 })), [state({ isToolChanging: true }), state({ isToolChanging: false, tool: 0 })]);
+  assert.ok(!M.runCheck('toolChange', tr, {}).done);
+  tr = track(M.startTracker(state({ tool: 4 })), [state({ isToolChanging: true }), state({ isToolChanging: false, tool: '4' })]);
+  assert.ok(!M.runCheck('toolChange', tr, {}).done);
+});
+
+test('moves are capped', () => {
+  const tr = M.startTracker(state());
+  for (let i = 1; i <= 150; i++) M.trackState(tr, state({ MPos: (10 + i) + ',20,-5,0' }));
+  assert.strictEqual(tr.moves.length, 100);
 });

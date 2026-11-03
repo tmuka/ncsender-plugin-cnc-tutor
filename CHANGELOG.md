@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0: Students, probing and tools
 
 - Level 6, Probing and tool changes: changing a bit and the collet, how a probe works, the touch plate, the tool length setter, tool changes and the ATC, and the 3D probe. Each shows what your machine has set up in ncSender; a lesson for something it doesn’t have is marked optional and says so. Try it watches the probe input, a probe cycle, a TLS measurement and a tool change.
 - Lessons, quizzes, pictures and the practice program follow ncSender’s units: inch machines get inch examples and an inch practice program.

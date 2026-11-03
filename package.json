@@ -1,6 +1,6 @@
 {
   "name": "ncsender-plugin-cnc-tutor",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license": "GPL-3.0-only",
   "description": "ncSender plugin: beginner CNC lessons that watch your machine while you try each step",
   "private": true,

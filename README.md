@@ -22,13 +22,24 @@ visualizer, which doesn't run until you press Start.
 | 3. Zero | Work coordinates (G54–G59) · Zero X and Y · Zero Z · A new bit needs a new Z (tool length) |
 | 4. Running a program | G-code in five minutes · Check before you cut · The air cut · Pause, stop and resume |
 | 5. Cutting well | Bits · Feeds and speeds (with a chip load calculator) · Depth of cut and stepover · Climb vs conventional · Holding the work |
+| 6. Probing and tools | Changing a bit: the collet · How a probe works · The touch plate · The tool length setter · Tool changes and the ATC · The 3D probe |
 | Your first part | A pocket in scrap with QuickCut, step by step, each step linked to its lesson |
+
+Lessons for things your machine doesn't have set up in ncSender (a tool length setter, an ATC, a 3D probe) are
+marked optional and say so. Lengths, feeds and the practice program follow ncSender's units, mm or inches.
 
 Each lesson has a **Check yourself** quiz and links to the matching pages of
 [ncSender's docs](https://docs.ncsender.xyz). On the kiosk screen, a link shows a QR code to open it on your phone.
 
 Also: **Your machine** (its settings in plain words), **Where am I?** (the live state in words, and a map of the
 table with the spindle and your work zeros), and a **Glossary**.
+
+## Students on a shared machine
+
+One student at a time. When the tutor opens it asks **Who's learning?**: pick your name to carry on where you
+stopped, add yourself (a name is all it keeps), or continue as a guest (nothing saved). **Switch student** and
+**Sign out** are in the sidebar, and after a 2-hour break it asks "Still you?". **Class progress** shows every
+student's lessons, Try it steps, first-try quiz score and when they were last active.
 
 ## Try it: what the tutor watches for
 
@@ -42,6 +53,10 @@ table with the spindle and your work zeros), and a **Glossary**.
 | Check before you cut | the practice program loaded |
 | The air cut | the practice program run to the end |
 | Pause, stop and resume | a pause and a resume (optional) |
+| How a probe works | the probe input coming on when you touch the plate to the bit |
+| The touch plate | a probe from ncSender's Probe dialog that sets the zero |
+| The tool length setter | a TLS measurement (optional) |
+| Tool changes and the ATC | a tool change (optional) |
 
 Keyboard jogging, a gamepad and the pendant work with the tutor open. To use ncSender's buttons, press
 **Start** in the lesson's Try it: the tutor becomes a card you can move to any corner (**Move**), and ncSender
@@ -49,7 +64,7 @@ works behind it. **Back to the lesson** brings it back.
 
 ## The practice program
 
-A 40 × 30 mm rectangle and a circle, 0.5 mm deep, in millimeters, from X0 Y0 at its front-left corner with Z0
+A 40 × 30 mm rectangle and a circle, 0.5 mm deep (1.5 × 1.25 in and 0.02 in deep on an inch machine), from X0 Y0 at its front-left corner with Z0
 on the stock top. The G-code lesson reads it line by line, and Check before you cut and The air cut load it.
 
 ## Install

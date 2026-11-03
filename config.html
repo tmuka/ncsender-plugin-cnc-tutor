@@ -41,7 +41,7 @@
   .ct-progress-text { font-size: 0.78rem; color: var(--color-text-secondary); }
   .ct-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; flex: 1; padding-right: 2px; }
   .ct-nav-level { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); padding: 12px 10px 4px; }
-  .ct-nav-btn { -webkit-appearance: none; appearance: none; display: flex; align-items: center; gap: 10px; padding: 8px 10px !important; width: 100%; margin: 0; text-align: left; line-height: 1.25; min-height: 38px;
+  .ct-nav-btn { -webkit-appearance: none; appearance: none; display: flex; align-items: center; gap: 10px; padding: 8px 10px !important; width: 100%; margin: 0; text-align: left; line-height: 1.25; min-height: 42px;
     background: transparent !important; border: none !important; border-radius: 8px !important; box-shadow: none; color: var(--color-text-secondary) !important; font: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
   .ct-nav-btn:hover { background: color-mix(in srgb, var(--color-text-primary) 5%, transparent) !important; color: var(--color-text-primary) !important; }
   .ct-nav-btn.active { background: color-mix(in srgb, var(--color-accent) 14%, transparent) !important; color: var(--color-text-primary) !important; font-weight: 600; }
@@ -77,9 +77,8 @@
   .ct-lesson { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 24px; align-items: start; }
   @media (max-width: 1200px) {
     .ct-lesson { grid-template-columns: minmax(0, 1fr); }
-    .ct-lesson > .ct-col:last-child { order: -1; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-    .ct-lesson > .ct-col:last-child > * { flex: 1 1 260px; }
-    .ct-lesson .ct-figbox { max-width: 420px; }
+    .ct-lesson > .ct-col:last-child { display: contents; }
+    .ct-lesson .ct-figbox { order: -1; max-width: 460px; }
   }
   .ct-col { display: flex; flex-direction: column; gap: var(--ct-gap); min-width: 0; }
   .ct-body { display: flex; flex-direction: column; gap: 12px; font-size: 1rem; line-height: 1.55; max-width: 760px; }
@@ -122,7 +121,9 @@
   .ct-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .ct-links a { color: var(--ct-accent-text); text-decoration: none; font-weight: 500; }
   .ct-links a:hover { text-decoration: underline; }
-  .ct-links .ct-url { display: block; font-size: 0.75rem; color: var(--color-text-secondary); word-break: break-all; }
+  .ct-links .ct-url { display: block; font-size: 0.72rem; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+  .ct-btn.ct-small { min-height: 40px; padding: 6px 12px !important; font-size: 0.85rem; }
+  .ct-xref { white-space: nowrap; }
   .ct-figbox { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; padding: 12px; }
   .ct-fig { width: 100%; height: auto; display: block; }
   .ct-fig text { font: 12px Inter, system-ui, sans-serif; }
@@ -259,7 +260,7 @@
   <div class="ct-minicard" id="ct-minicard">
     <div class="ct-mini-head">
       <span class="ct-eyebrow" id="ct-mini-title">Try it</span>
-      <button type="button" class="ct-iconbtn" id="ct-mini-move" title="Move this card to another corner">Move ↻</button>
+      <button type="button" class="ct-iconbtn" id="ct-mini-move" title="Move this card to another corner">Move card ⇲</button>
     </div>
     <p class="ct-mini-text" id="ct-mini-text"></p>
     <ul class="ct-checks" id="ct-mini-checks"></ul>
@@ -413,7 +414,7 @@ function startTracker(state) {
     start: { homed: !!ms.homed, workspace: String(ms.workspace || 'G54').toUpperCase(), offsets: offsets,
       job: state && state.jobLoaded ? { filename: state.jobLoaded.filename, status: state.jobLoaded.status } : null, tool: ms.tool, toolLengthSet: !!ms.toolLengthSet },
     lastIdle: ctStatus(ms) === 'Idle' ? ctVec(ms.MPos) : null,
-    pins: {}, probing: false, probeDone: false, probeAlarm: false, toolChanging: false, toolChangeDone: false,
+    pins: {}, pinsOff: { P: String(ms.Pn || '').indexOf('P') < 0, T: String(ms.Pn || '').indexOf('T') < 0 }, probing: false, probeDone: false, probeAlarm: false, afterProbe: 0, toolChanging: false, toolChangeDone: false,
     seen: {}, jobSeen: {}, runAfterHold: false, airZ: null, workspaces: [String(ms.workspace || 'G54').toUpperCase()], moves: [], state: state || {}
   };
 }
@@ -424,9 +425,15 @@ function trackState(tr, state) {
   if (status === 'Run' && tr.seen.Hold) tr.runAfterHold = true;
   // Probe input P, tool setter T (ncSender normalizes grblHAL's pins);
   // isProbing is set while ncSender's Probe dialog runs a probe.
-  String(ms.Pn || '').split('').forEach(function(c) { tr.pins[c] = true; });
-  if (ms.isProbing) { tr.probing = true; if (status === 'Alarm') tr.probeAlarm = true; }
-  else if (tr.probing) { tr.probing = false; tr.probeDone = true; if (status === 'Alarm') tr.probeAlarm = true; }
+  // A touch counts only after the input was seen off (an inverted input or
+  // a clip resting on the plate would otherwise pass at once).
+  var pn = String(ms.Pn || '');
+  ['P', 'T'].forEach(function(c) { if (pn.indexOf(c) < 0) tr.pinsOff[c] = true; else if (tr.pinsOff[c]) tr.pins[c] = true; });
+  // A new probe starts afresh; an alarm that arrives just after isProbing
+  // clears still belongs to it.
+  if (ms.isProbing) { if (!tr.probing) { tr.probeDone = false; tr.probeAlarm = false; } tr.probing = true; if (status === 'Alarm') tr.probeAlarm = true; }
+  else if (tr.probing) { tr.probing = false; tr.probeDone = true; tr.afterProbe = 3; if (status === 'Alarm') tr.probeAlarm = true; }
+  else if (tr.afterProbe > 0) { tr.afterProbe--; if (status === 'Alarm') tr.probeAlarm = true; }
   if (ms.isToolChanging) tr.toolChanging = true;
   else if (tr.toolChanging) { tr.toolChanging = false; tr.toolChangeDone = true; }
   var job = state && state.jobLoaded;
@@ -446,7 +453,7 @@ function trackState(tr, state) {
   if (!pos) return tr;
   if (tr.lastIdle) {
     var d = { x: pos.x - tr.lastIdle.x, y: pos.y - tr.lastIdle.y, z: pos.z - tr.lastIdle.z };
-    if (CT_AXES.some(function(k) { return Math.abs(d[k]) > 0.0005; })) tr.moves.push(d);
+    if (CT_AXES.some(function(k) { return Math.abs(d[k]) > 0.0005; })) { tr.moves.push(d); if (tr.moves.length > 100) tr.moves.shift(); }
   }
   tr.lastIdle = pos;
   return tr;
@@ -505,8 +512,9 @@ var CHECKS = {
     ], get done() { return this.items[0].done && this.items[1].done; } };
   },
   probeSignal: function(tr) {
-    var ms = tr.state.machineState || {}, now = String(ms.Pn || '').indexOf('P') >= 0;
-    return { items: [{ label: 'Touch the plate to the bit', done: !!tr.pins.P, detail: now ? 'Touching now: the probe input is on.' : tr.pins.P ? 'Seen: the probe input came on.' : '' }], done: !!tr.pins.P };
+    var ms = tr.state.machineState || {}, pn = String(ms.Pn || ''), seen = !!(tr.pins.P || tr.pins.T);
+    var detail = /[PT]/.test(pn) && !seen ? 'The probe input is on already: move the plate away from the bit, then touch it.' : /[PT]/.test(pn) ? 'Touching now: the probe input is on.' : seen ? 'Seen: the probe input came on.' : '';
+    return { items: [{ label: 'Touch the plate to the bit', done: seen, detail: detail }], done: seen };
   },
   probeCycle: function(tr, f) {
     var ms = tr.state.machineState || {}, ws = String(ms.workspace || 'G54').toUpperCase(), was = tr.start.offsets[ws], now = activeOffset(ms);
@@ -518,15 +526,17 @@ var CHECKS = {
     ], get done() { return this.items[1].done; } };
   },
   tlsMeasure: function(tr) {
+    // ncSender's TLS runs as a tool change ($TLS sets isToolChanging); the
+    // setter's touch is brief and may show as P or T, or between reports.
     var ms = tr.state.machineState || {}, measured = !!ms.toolLengthSet;
-    var did = !!tr.pins.T || (!tr.start.toolLengthSet && measured);
+    var did = !!tr.pins.T || !!tr.pins.P || tr.toolChangeDone || (!tr.start.toolLengthSet && measured);
     return { items: [
       { label: 'Measure the bit on the tool length setter', done: did, detail: tr.pins.T ? 'Seen: the tool setter was touched.' : '' },
       { label: 'Its length is set', done: did && measured, detail: did && measured ? 'Tool ' + (ms.tool != null ? ms.tool : '') + ' is measured.' : '' }
     ], get done() { return this.items[1].done; } };
   },
   toolChange: function(tr) {
-    var ms = tr.state.machineState || {}, changed = ms.tool != null && ms.tool !== tr.start.tool;
+    var ms = tr.state.machineState || {}, changed = !!ms.tool && String(ms.tool) !== String(tr.start.tool);
     return { items: [
       { label: 'Change tools from ncSender', done: tr.toolChanging || tr.toolChangeDone, detail: tr.toolChanging ? 'Changing tools…' : '' },
       { label: 'The new tool is in', done: tr.toolChangeDone && changed, detail: tr.toolChangeDone && changed ? 'Tool ' + ms.tool + ' is in the spindle.' : '' }
@@ -760,7 +770,7 @@ var CT_LEVELS = [
   { id: 3, title: 'Zero' },
   { id: 4, title: 'Running a program' },
   { id: 5, title: 'Cutting well' },
-  { id: 6, title: 'Probing and tool changes' },
+  { id: 6, title: 'Probing and tools' },
   { id: 99, title: 'Your first part', capstone: true }
 ];
 
@@ -837,14 +847,14 @@ var CT_LESSONS = [
   { id: 'jogging', level: 2, title: 'Jogging', mins: 5, fig: 'jog',
     body:
       '<p><strong>Jogging</strong> is moving the machine by hand from ncSender, to put the bit where you want it: over a corner of the stock, down to touch its top, out of the way.</p>' +
-      '<ul><li><strong>Step jog:</strong> each press moves exactly one step, {like 10, 1 or 0.1 mm|like 0.1, 0.01 or 0.001 in}. Use big steps to travel and small ones as you get close.</li>' +
+      '<ul><li><strong>Step jog:</strong> each press moves exactly one step, {like 10, 1 or 0.1 mm|like 1, 0.1 or 0.01 in}. Use big steps to travel and small ones as you get close.</li>' +
       '<li><strong>Continuous jog:</strong> hold the button (or key) and the axis moves until you let go. Fast for long moves, risky near the work.</li>' +
       '<li><strong>Jog feed</strong> is how fast it moves. Slow down near the stock.</li>' +
       '<li>You can also jog from the keyboard, a gamepad or the ncSender pendant.</li></ul>' +
       '<p>Near the stock, always use small steps going down in Z. A {10 mm|0.5 in} step at the wrong moment drives the bit into the work or the table.</p>',
     tryIt: { check: 'jogSizes', text: 'Pick a step size and jog any axis once. Then do the same with two other step sizes. Watch how far each one goes.' },
     quiz: [
-      { q: 'The bit is {3 mm|1/8 in} above the stock and you want to touch it. Which step?', a: ['{10 mm|0.5 in}', '{1 mm, then 0.1 mm|0.01 in, then 0.001 in}', 'Continuous jog down'], right: 1, why: 'Close to the work, small steps can’t overshoot.' }
+      { q: 'The bit is {3 mm|1/8 in} above the stock and you want to touch it. Which step?', a: ['{10 mm|0.5 in}', '{1 mm, then 0.1 mm|0.1 in, then 0.01 in}', 'Continuous jog down'], right: 1, why: 'Close to the work, small steps can’t overshoot.' }
     ],
     docs: ['jog-steps', 'jog-continuous', 'jog-feeds', 'jog-keys', 'gamepad', 'pendant'] },
 
@@ -895,7 +905,7 @@ var CT_LESSONS = [
       '<ul><li><strong>Paper method:</strong> with the spindle off, slide a sheet of paper under the bit and lower it in {0.1 mm|0.001 in} steps until the paper just drags. The paper is about {0.1 mm thick, so set Z to 0.1|0.004 in thick, so set Z to 0.004} there (or zero it and accept {0.1 mm|0.004 in}).</li>' +
       '<li><strong>Touch plate:</strong> lay the plate on the stock, clip the magnet to the bit, and <strong>test the circuit first</strong>: touch the plate to the bit and see ncSender’s probe signal change. If it doesn’t, the bit would drive into the plate. Then probe: ncSender lowers until the bit touches and subtracts the plate’s thickness. Put the clip and plate away before the spindle starts.</li></ul>' +
       '<p>Never zero Z with the spindle running, and keep the bit clean: a chip under the tip makes every cut shallower.</p>',
-    tryIt: { check: 'zeroZ', text: 'Lower the bit onto a piece of scrap (paper method or touch plate) and zero Z in ncSender. Then lift a few millimeters.' },
+    tryIt: { check: 'zeroZ', text: 'Lower the bit onto a piece of scrap (paper method or touch plate) and zero Z in ncSender. Then lift {a few millimeters|about 1/8 in}.' },
     quiz: [
       { q: 'Z0 is the top of {6 mm|1/4 in} stock. To cut a part out cleanly, the last pass should go to…', a: ['{Z−6|Z−0.25} exactly', 'A little past it, like {Z−6.2|Z−0.26}', '{Z−12|Z−0.5}, to be sure'], right: 1,
         why: 'At exactly {Z−6|Z−0.25} a thin skin of fibers often stays at the bottom. A little past it cuts cleanly into the spoilboard, which is what the spoilboard is for.' }
@@ -1044,16 +1054,16 @@ var CT_LESSONS = [
     body:
       '<p>The bit is held by a <strong>collet</strong>: a slotted sleeve that squeezes the bit’s shank when the <strong>nut</strong> is tightened. Each collet fits one shank size (1/4", 1/8", 6 mm…). Spindles use ER collets; trim routers have their own.</p>' +
       '<ol><li><strong>Spindle off.</strong> Unplug a router, or switch off the spindle, before your hands go near the bit.</li>' +
-      '<li><strong>Clean</strong> the collet, the nut and the taper inside the spindle: a chip in there makes the bit wobble (runout).</li>' +
+      '<li><strong>Clean</strong> the collet, the nut and the cone inside the spindle the collet sits in: a chip in there makes the bit wobble.</li>' +
       '<li><strong>Snap the collet into the nut first</strong> (an ER collet clicks into place when pushed in at a slight angle). If it isn’t clicked in, it won’t grip evenly or let go later.</li>' +
       '<li><strong>Put the bit in</strong> so most of the shank is gripped, with the flutes clear of the collet and the bit not touching the bottom. Less sticking out means less bending and chatter.</li>' +
-      '<li><strong>Tighten firmly</strong> with the two wrenches (or the spindle lock and one wrench). Firm, not with a cheater bar.</li></ol>' +
-      '<p><strong>Loosening:</strong> the nut turns easily, then gets tight again: that’s the nut pulling the collet out of the taper. Keep turning, and hold the bit so it doesn’t drop onto the work.</p>' +
-      '<p>Never tighten the nut with no bit in (it bends the collet), and replace a collet that’s worn or let a bit slip. After a bit change, Z0 needs measuring again: [[tool-length]].</p>',
+      '<li><strong>Tighten firmly</strong> with the two wrenches (or the spindle lock and one wrench). Firm, but don’t add a pipe or a longer lever for force.</li></ol>' +
+      '<p><strong>Loosening:</strong> the nut turns easily, then gets tight again: that’s the nut pulling the collet out of the spindle’s cone. Keep turning, and hold the bit so it doesn’t drop onto the work.</p>' +
+      '<p>Never tighten the nut with no bit in (it bends the collet), and replace a collet that’s worn or has let a bit slide out. After a bit change, Z0 needs measuring again: [[tool-length]].</p>',
     ticks: ['The spindle is off (the router unplugged) when I change a bit', 'I snap the collet into the nut before the bit goes in'],
     quiz: [
-      { q: 'Loosening the nut, it turns easily, then gets tight again. What’s happening?', a: ['It’s cross-threaded: stop', 'The nut is pulling the collet out of the taper: keep turning'], right: 1,
-        why: 'The second tight spot is the collet coming free of the taper. That’s normal; keep turning.' },
+      { q: 'Loosening the nut, it turns easily, then gets tight again. What’s happening?', a: ['It’s cross-threaded: stop', 'The nut is pulling the collet out of the spindle: keep turning'], right: 1,
+        why: 'The second tight spot is the collet coming free of the spindle’s cone. That’s normal; keep turning.' },
       { q: 'How far does the bit go into the collet?', a: ['Just the end of the shank', 'Most of the shank, flutes clear of the collet, not touching the bottom', 'All the way, flutes inside the collet'], right: 1,
         why: 'Gripping most of the shank holds it straight. Flutes in the collet can’t be gripped evenly; a bit on the bottom can’t seat.' }
     ],
@@ -1063,7 +1073,7 @@ var CT_LESSONS = [
     body:
       '<p>A touch plate, a 3D probe and a tool length setter all work the same way: a <strong>switch</strong>. For a touch plate, the clip on the bit and the metal plate are the two sides of the switch. When the bit touches the plate, the circuit closes, the controller stops at once and records exactly where it was.</p>' +
       '<p>That’s more exact than paper, and the same every time. ncSender then works out the zero from that spot (taking off the plate’s thickness, for example).</p>' +
-      '<ul><li><strong>The danger:</strong> if the circuit can’t close (the clip fell off, a broken wire), nothing tells the controller to stop: the bit pushes into the plate until it reaches the probe distance and gives up with an alarm.</li>' +
+      '<ul><li><strong>The danger:</strong> if the circuit can’t close (the clip fell off, a broken wire), nothing tells the controller to stop: the bit keeps pushing into the plate until it has gone as far as the probe is allowed to travel, then gives up with an alarm.</li>' +
       '<li>So <strong>test it every time</strong>: touch the plate to the bit and watch the probe light in ncSender come on. ncSender can ask for this before each probe (the connection test).</li>' +
       '<li>Spindle off while probing. Probing moves slowly; keep your hands clear anyway.</li></ul>',
     tryIt: { check: 'probeSignal', text: 'With the spindle off and the clip on the bit, touch the plate to the bit by hand. The probe input should light up.' },
@@ -1075,13 +1085,13 @@ var CT_LESSONS = [
 
   { id: 'touch-plate', level: 6, title: 'The touch plate', mins: 6, fig: 'touchplate', live: 'touchplate',
     body:
-      '<p>A <strong>touch plate</strong> (a standard block) sits on the stock. Probing Z, the bit comes down onto its top; probing X and Y, the bit touches its inside walls from the side. ncSender takes off the plate’s thickness and the bit’s radius and sets the zero on the stock.</p>' +
+      '<p>A <strong>touch plate</strong> (ncSender calls it a Standard block) sits on the stock. Probing Z, the bit comes down onto its top; probing X and Y, the bit comes down beside the plate and touches the outside of its lips, which hang over the stock’s edges. ncSender takes off the plate’s thickness and the bit’s radius and sets the zero on the stock.</p>' +
       '<ul><li><strong>Z thickness:</strong> the plate’s height. Measure it once with calipers and enter it exactly: any error goes straight into your depth.</li>' +
-      '<li><strong>XY thickness:</strong> how thick its walls are, for corner probing.</li>' +
+      '<li><strong>XY thickness:</strong> how thick those lips are, from the face the bit touches to the stock’s edge.</li>' +
       '<li><strong>Bit diameter:</strong> for X and Y, the bit touches with its side, so its center is half a diameter away. Give the real diameter.</li>' +
       '<li><strong>Corner:</strong> tell ncSender which corner of the stock the plate is on.</li>' +
       '<li><strong>AutoZero Touch</strong> plates measure the bit for you and need almost no setup.</li></ul>' +
-      '<p>Start the bit over the plate, a few millimeters above it, and do the connection test. Afterwards, put the clip and the plate away before the spindle starts.</p>',
+      '<p>Start the bit over the plate, {a few millimeters|about 1/8 in} above it, and do the connection test. Afterwards, put the clip and the plate away before the spindle starts.</p>',
     tryIt: { check: 'probeCycle', text: 'In ncSender, press Probe, pick your plate, and probe Z (or XYZ on a corner). Test the connection first.' },
     quiz: [
       { q: 'Your plate is {15 mm|0.6 in} thick. After probing Z, where is Z0?', a: ['On top of the plate', 'On top of the stock under it: ncSender takes off the {15 mm|0.6 in}'], right: 1,
@@ -1094,7 +1104,7 @@ var CT_LESSONS = [
   { id: 'tls', level: 6, title: 'The tool length setter', mins: 6, fig: 'tls', live: 'tls', needs: 'tls',
     body:
       '<p>A <strong>tool length setter</strong> (TLS) is a switch fixed to the table. The machine brings each bit down onto it and records where the tip touched. The difference between two bits is their difference in length: the controller shifts Z by it, the <strong>tool length offset</strong>, so Z0 stays right after a bit change without zeroing on the stock again.</p>' +
-      '<ul><li>After power-on, the tool in the spindle must be measured once before it cuts: ncSender’s TLS button blinks red until it is.</li>' +
+      '<ul><li>After power-on, the tool in the spindle must be measured once before it cuts: ncSender’s TLS button blinks red until it is (if you don’t, ncSender measures it when you press Start).</li>' +
       '<li>ncSender can measure right after homing (TLS after homing): the machine then moves to the setter by itself.</li>' +
       '<li>Set Z0 before or after measuring: both work in ncSender.</li>' +
       '<li>Every time a bit goes into the collet, even the same bit, measure it again.</li></ul>',
@@ -1125,13 +1135,13 @@ var CT_LESSONS = [
     body:
       '<p>A <strong>3D probe</strong> goes in the spindle like a bit. Its stylus, with a small ball on the end, is on a spring: when the ball touches something from any side, the stylus tips a little and the probe signals.</p>' +
       '<ul><li>It finds an <strong>edge</strong>, a <strong>corner</strong>, the <strong>top</strong>, or the <strong>center</strong> of a hole or a round part, without a plate.</li>' +
-      '<li><strong>Ball diameter:</strong> ncSender allows for it. Calibrate it (probe a hole of known size): the stylus bends a little before it signals, so it acts slightly smaller than the ball.</li>' +
-      '<li>It’s a tool in the tool library (the probe slot); ncSender’s Probe button loads it.</li>' +
+      '<li><strong>Ball diameter:</strong> ncSender allows for it on edges and corners (a center comes out right whatever the ball). The stylus bends a little before it signals, so the probe acts slightly smaller than the ball: if edges come out a little off, enter that smaller effective diameter.</li>' +
+      '<li>It’s a tool in the tool library: the Probe slot (T99 by default). Hold its button to load it.</li>' +
       '<li><strong>Never turn the spindle on with the probe in.</strong> Check the program and the tool before pressing Start.</li></ul>',
     quiz: [
       { q: 'Can you run the spindle slowly with the 3D probe in?', a: ['Yes, at low RPM', 'Never: it wrecks the probe'], right: 1, why: 'The probe isn’t made to spin.' },
-      { q: 'Why calibrate the ball diameter?', a: ['It changes with temperature', 'The stylus bends a little before it signals, so it acts slightly smaller than the ball'], right: 1,
-        why: 'Calibrating measures the size it really acts as.' }
+      { q: 'Edges probed with a 3D probe come out a little off. Why might that be?', a: ['The ball changes size with temperature', 'The stylus bends a little before it signals, so it acts slightly smaller than the ball'], right: 1,
+        why: 'Entering the smaller, effective diameter puts the edges right.' }
     ],
     docs: ['probe-3d', 'tool-library-probe'] },
 
@@ -1328,7 +1338,7 @@ var CT_FIGS = {
     return ctSvg(
       '<rect class="f-stock" x="40" y="170" width="240" height="32"/>' + ctText(270, 191, 'stock', 'f-stock-txt', 'end') +
       '<g>' + ctMove(pts, times, D) + ctSpindle(120, 80, 20) + '</g>' +
-      label(.03, .28, (inch ? '0.1 in' : '10 mm') + ' steps: travel') + label(.3, .56, (inch ? '0.01 in' : '1 mm') + ' steps: getting close') + label(.58, .88, (inch ? '0.001 in' : '0.1 mm') + ' steps: touching') +
+      label(.03, .28, (inch ? '1 in' : '10 mm') + ' steps: travel') + label(.3, .56, (inch ? '0.1 in' : '1 mm') + ' steps: getting close') + label(.58, .88, (inch ? '0.01 in' : '0.1 mm') + ' steps: touching') +
       ctText(306, 66, 'one press, one step', 'f-txt', 'end'), 320, 208, 'Big steps to travel, then small steps to touch the stock', 8);
   },
 
@@ -1551,10 +1561,10 @@ var CT_FIGS = {
     function step(t0, t1, text) { return '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, t0, t0 + .02, t1, t1 + .02, 1], D) + ctText(300, 30, text, 'f-acc-txt', 'end') + '</g>'; }
     return ctSvg(
       '<rect class="f-stock" x="60" y="44" width="220" height="126"/>' + ctText(270, 160, 'stock (seen from above)', 'f-stock-txt', 'end') +
-      '<rect class="f-plate" x="44" y="126" width="60" height="60" rx="2"/><path class="f-plate-lip" d="M44 126h6v54h54v6h-60z"/>' +
+      '<rect class="f-plate" x="44" y="126" width="60" height="60" rx="2"/><path class="f-plate-lip" d="M44 126h16v44h44v16h-60z"/>' +
       '<circle class="f-ring" cx="78" cy="152" r="8" opacity="0"><animate attributeName="r" values="18;8;8" keyTimes="0;.12;1" dur="' + D + 's" repeatCount="indefinite"/>' +
       ctFade([0, 1, 1, 0, 0], [0, .02, .12, .14, 1], D) + '</circle>' +
-      '<g>' + ctMove([[0, 0], [0, 0], [-52, 4], [-42, 4], [-42, 4], [-4, 54], [-4, 42], [-4, 42], [0, 0], [0, 0]], [0, .14, .24, .32, .38, .48, .56, .9, .96, 1], D) + ctBitTop(78, 152, 8, .4) + '</g>' +
+      '<g>' + ctMove([[0, 0], [0, 0], [-52, 4], [-42, 4], [-42, 4], [-52, 54], [-4, 54], [-4, 42], [-4, 42], [0, 0], [0, 0]], [0, .14, .24, .32, .38, .43, .48, .56, .9, .96, 1], D) + ctBitTop(78, 152, 8, .4) + '</g>' +
       '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .6, .63, .9, .93, 1], D) + '<path class="f-zero" d="M44 170h32M60 154v32"/>' + ctText(300, 30, 'X0 Y0 Z0 on the stock’s corner', 'f-acc-txt', 'end') + '</g>' +
       step(.0, .13, 'Z: down onto the top') + step(.2, .36, 'X: against its side') + step(.42, .58, 'Y: against its front'),
       320, 214, 'Probing a touch plate on a corner: Z on the top, then X and Y on its sides', 7.5);
@@ -1591,7 +1601,7 @@ var CT_FIGS = {
   probe3d: function() {
     var D = 10;
     return ctSvg(
-      '<rect class="f-stock" x="40" y="20" width="240" height="160"/>' + '<circle class="f-hole" cx="160" cy="100" r="40"/>' + ctText(270, 172, 'a hole, seen from above', 'f-stock-txt', 'end') +
+      '<rect class="f-stock" x="40" y="20" width="240" height="160"/>' + '<circle class="f-hole" cx="160" cy="100" r="40"/>' + ctText(270, 172, 'a hole, seen from above', 'f-stock-txt', 'end') + '<circle class="f-ball" cx="54" cy="34" r="5"/>' + ctText(64, 38, 'the probe’s ball tip', 'f-stock-txt') +
       '<g>' + ctMove([[0, 0], [0, 0], [43.7, 0], [-23.7, 0], [10, 0], [10, -39], [10, 29], [10, -5], [10, -5], [0, 0], [0, 0]], [0, .05, .15, .3, .36, .46, .6, .7, .92, .97, 1], D) +
       '<circle class="f-ball" cx="150" cy="105" r="6"/></g>' +
       '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .7, .73, .92, .95, 1], D) + '<path class="f-zero" d="M144 100h32M160 84v32"/>' + ctText(160, 154, 'center found', 'f-acc-txt', 'middle') + '</g>' +
@@ -1645,17 +1655,34 @@ function migrateSettings(cfg, nowIso) {
     if (!s || typeof s !== 'object') { delete cfg.students[id]; return; }
     ['done', 'ticks', 'answers', 'firstAnswers', 'feeds'].forEach(function(k) { if (!s[k] || typeof s[k] !== 'object') s[k] = {}; });
   });
-  if (cfg.current && !cfg.students[cfg.current]) cfg.current = null;
+  if (cfg.current && !cfg.students[cfg.current]) { cfg.current = null; patches.push([['current'], null]); }
   return patches;
 }
 
 function studentIds(cfg) {
   return Object.keys(cfg.students || {}).sort(function(a, b) { return String(cfg.students[a].name).localeCompare(String(cfg.students[b].name)); });
 }
-function newStudentId(cfg) {
-  var n = 1;
-  while (cfg.students['s' + n]) n++;
-  return 's' + n;
+// Ids never repeat, so two screens adding at once, or a late save for a
+// removed student, can't land on someone else.
+function newStudentId(cfg, nowMs, rand) {
+  var id;
+  do { id = 's' + Math.floor(nowMs || Date.now()).toString(36) + Math.floor((rand != null ? rand : Math.random()) * 1296).toString(36); rand = Math.random(); }
+  while (cfg.students[id]);
+  return id;
+}
+// Saves are patches ([keys, value]) applied onto the settings as they are on
+// the server now. A patch inside a student who isn't there any more is dropped
+// (they were removed on another screen); writing a whole student is kept.
+function applyPatches(server, patches) {
+  var out = server && typeof server === 'object' ? server : {};
+  patches.forEach(function(p) {
+    var keys = p[0];
+    if (keys[0] === 'students' && keys.length > 2 && !(out.students && out.students[keys[1]])) return;
+    var o = out;
+    for (var i = 0; i < keys.length - 1; i++) { if (!o[keys[i]] || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
+    if (p[1] === undefined) delete o[keys[keys.length - 1]]; else o[keys[keys.length - 1]] = p[1];
+  });
+  return out;
 }
 // A name as typed, tidied: trimmed, spaces collapsed, at most 30 characters.
 function cleanName(name) { return String(name || '').replace(/\s+/g, ' ').trim().slice(0, 30); }
@@ -1720,7 +1747,7 @@ function agoText(iso, nowMs) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { CT_COLORS: CT_COLORS, CT_STILL_YOU_MS: CT_STILL_YOU_MS, ctEmptyProgress: ctEmptyProgress, migrateSettings: migrateSettings,
-    studentIds: studentIds, newStudentId: newStudentId, cleanName: cleanName, nameTaken: nameTaken, nextColor: nextColor,
+    studentIds: studentIds, newStudentId: newStudentId, applyPatches: applyPatches, cleanName: cleanName, nameTaken: nameTaken, nextColor: nextColor,
     openingView: openingView, classProgress: classProgress, agoText: agoText };
 }
 /* END lib/tutor-students.cjs */
@@ -1774,16 +1801,17 @@ if (typeof module !== 'undefined' && module.exports) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flushSave, 400);
   }
-  async function flushSave() {
-    var todo = patches; patches = [];
-    var now = await getJson('/api/plugins/' + PLUGIN_ID + '/settings').catch(function() { return null; });
-    if (!now || typeof now !== 'object') now = {};
-    todo.forEach(function(p) {
-      var o = now, keys = p[0];
-      for (var i = 0; i < keys.length - 1; i++) { if (!o[keys[i]] || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
-      o[keys[keys.length - 1]] = p[1];
+  // One flush at a time: each reads the settings after the last one's PUT.
+  var flushing = Promise.resolve();
+  function flushSave() {
+    flushing = flushing.then(async function() {
+      var todo = patches; patches = [];
+      if (!todo.length) return;
+      var now = await getJson('/api/plugins/' + PLUGIN_ID + '/settings').catch(function() { return null; });
+      await fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(applyPatches(now, todo)) }).catch(function() {});
     });
-    fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(now) }).catch(function() {});
+    return flushing;
   }
   // The student at the machine (st.sid: an id, GUEST, or null for nobody yet)
   // and their progress P. A guest's progress lives only in this dialog.
@@ -1901,10 +1929,10 @@ if (typeof module !== 'undefined' && module.exports) {
   var FREE_PAGES = ['students', 'class', 'machine', 'where', 'glossary'];
   function go(page) {
     if (page !== 'home' && FREE_PAGES.indexOf(page) < 0 && !lessonById(page)) page = 'home';
-    if (!st.sid && FREE_PAGES.indexOf(page) < 0) page = 'students';
+    if (!st.sid && FREE_PAGES.indexOf(page) < 0) { if (lessonById(page)) st.wanted = page; page = 'students'; }
     if (page !== 'students') { st.ask = null; st.renaming = null; }
     st.page = page;
-    if (st.sid) local('page:' + st.sid, page);
+    if (st.sid && st.sid !== GUEST) local('page:' + st.sid, page);
     if (lessonById(page) && student() && student().lastLesson !== page) { student().lastLesson = page; psave(['lastLesson'], page); }
     touch();
     var p = $('ct-panel');
@@ -1929,15 +1957,17 @@ if (typeof module !== 'undefined' && module.exports) {
     var s = student(), el = $('ct-who');
     if (!st.sid) { el.innerHTML = '<span class="ct-sub">Nobody signed in</span>'; return; }
     el.innerHTML = '<span class="ct-who-name">' + (s ? dot(s.color) + esc(s.name) : dot('gray') + 'Guest <span class="ct-sub">(not saved)</span>') + '</span>' +
-      '<span class="ct-who-actions"><button type="button" class="ct-linkbtn" data-page="students">Switch</button><button type="button" class="ct-linkbtn" id="ct-done-session">I’m done</button></span>';
+      '<span class="ct-who-actions"><button type="button" class="ct-btn ct-ghost ct-small" data-page="students">Switch student</button><button type="button" class="ct-btn ct-ghost ct-small" id="ct-done-session">Sign out</button></span>';
   }
   function studentsPage() {
     var now = Date.now(), ids = studentIds(cfg), h = '<div class="ct-page"><span class="ct-crumb">CNC Tutor</span><h2 class="ct-h1">Who’s learning?</h2>';
-    h += '<p class="ct-sub">This machine is shared, one student at a time. Pick your name to carry on where you stopped.</p>';
+    h += '<p>CNC Tutor teaches the basics of running this CNC, one short lesson at a time, on the machine itself.</p>' +
+      '<p class="ct-sub">The machine is shared, one student at a time. Pick your name to carry on where you stopped, or add yourself.</p>';
+    if (st.wanted && lessonById(st.wanted)) h += '<p class="ct-warnbox">Add your name or pick one (or continue as a guest) to open ' + esc(lessonById(st.wanted).title) + '.</p>';
     if (st.ask && cfg.students[st.ask]) {
       var a = cfg.students[st.ask];
       h += '<div class="ct-card ct-try"><h3 class="ct-h2">Still you, ' + esc(a.name) + '?</h3><p>The tutor was last used ' + esc(agoText(a.lastActive, now)) + '.</p>' +
-        '<div class="ct-actions"><button type="button" class="ct-btn" data-pick="' + st.ask + '">Yes, carry on</button><button type="button" class="ct-btn ct-ghost" id="ct-not-me">No, someone else</button></div></div>';
+        '<div class="ct-actions"><button type="button" class="ct-btn" data-pick="' + esc(st.ask) + '">Yes, carry on</button><button type="button" class="ct-btn ct-ghost" id="ct-not-me">No, someone else</button></div></div>';
     }
     h += '<div class="ct-students">';
     ids.forEach(function(id) {
@@ -1945,19 +1975,19 @@ if (typeof module !== 'undefined' && module.exports) {
       h += '<div class="ct-student' + (id === cfg.current ? ' current' : '') + '">';
       if (st.renaming === id) {
         h += '<div class="ct-field"><label for="ct-rename">New name</label><input class="ct-input ct-text" id="ct-rename" maxlength="30" value="' + esc(s.name) + '"></div>' +
-          '<div class="ct-actions"><button type="button" class="ct-btn" data-rename-save="' + id + '">Save</button><button type="button" class="ct-btn ct-ghost" data-rename-cancel>Cancel</button><span class="ct-note" id="ct-rename-note"></span></div>';
+          '<div class="ct-actions"><button type="button" class="ct-btn" data-rename-save="' + esc(id) + '">Save</button><button type="button" class="ct-btn ct-ghost" data-rename-cancel>Cancel</button><span class="ct-note" id="ct-rename-note"></span></div>';
       } else {
-        h += '<button type="button" class="ct-student-pick" data-pick="' + id + '">' + dot(s.color) + '<span class="ct-student-name">' + esc(s.name) + '</span>' +
+        h += '<button type="button" class="ct-student-pick" data-pick="' + esc(id) + '">' + dot(s.color) + '<span class="ct-student-name">' + esc(s.name) + '</span>' +
           '<span class="ct-sub">' + n + ' of ' + CT_LESSONS.length + ' lessons' + (last ? ' · last: ' + esc(last.title) : '') + '</span><span class="ct-sub">' + esc(agoText(s.lastActive, now)) + '</span></button>' +
-          '<div class="ct-student-tools"><button type="button" class="ct-linkbtn" data-rename="' + id + '">Rename</button><button type="button" class="ct-linkbtn ct-danger-text" data-remove="' + id + '">Remove</button></div>';
+          '<div class="ct-student-tools"><button type="button" class="ct-linkbtn" data-rename="' + esc(id) + '">Rename</button><button type="button" class="ct-linkbtn ct-danger-text" data-remove="' + esc(id) + '">Remove</button></div>';
       }
       h += '</div>';
     });
     h += '<div class="ct-student ct-student-add"><div class="ct-field"><label for="ct-new-name">' + (ids.length ? 'Add a student' : 'Your name, to keep your progress') + '</label>' +
       '<input class="ct-input ct-text" id="ct-new-name" maxlength="30" placeholder="A first name or nickname"></div>' +
       '<div class="ct-actions"><button type="button" class="ct-btn" id="ct-add-student">Add and start</button><span class="ct-note" id="ct-add-note"></span></div></div>';
-    h += '<div class="ct-student"><button type="button" class="ct-student-pick" data-pick="guest">' + dot('gray') + '<span class="ct-student-name">Guest</span><span class="ct-sub">Try the lessons without saving progress</span></button></div>';
-    h += '</div><p class="ct-sub">Only a name is kept, on this machine, in CNC Tutor’s settings (and in ncSender’s backups). Anyone at the machine can pick any name: it keeps progress apart, it isn’t a login.</p></div>';
+    h += '<div class="ct-student"><button type="button" class="ct-student-pick" data-pick="guest">' + dot('gray') + '<span class="ct-student-name">Continue as a guest</span><span class="ct-sub">Try the lessons; your progress isn’t saved</span></button></div>';
+    h += '</div><p class="ct-sub">Only your name is kept, on this machine. It keeps each person’s progress apart; it isn’t a password-protected login.</p></div>';
     return h;
   }
   function classPage() {
@@ -1974,7 +2004,7 @@ if (typeof module !== 'undefined' && module.exports) {
         '<td>' + r.done + ' of ' + r.of + '</td>' + CT_LEVELS.map(function(lv) { var c = r.perLevel[lv.id]; return '<td>' + c.done + '/' + c.of + '</td>'; }).join('') +
         '<td>' + r.tries + ' of ' + r.tryable + '</td><td>' + (r.quizAsked ? r.quizRight + ' of ' + r.quizAsked + ' right' : '–') + '</td><td>' + esc(agoText(r.lastActive, now)) + '</td></tr>';
     });
-    return h + '</table></div><p class="ct-sub">Quiz, first try: the first answer each student gave, from version 0.2 on. Tap a name to see their lessons.</p></div>';
+    return h + '</table></div><p class="ct-sub">Quiz, first try: questions answered right the first time. Tap a name to see their lessons.</p></div>';
   }
 
   // ---------- pages ----------
@@ -2005,10 +2035,11 @@ if (typeof module !== 'undefined' && module.exports) {
     h += '<div class="ct-lesson"><div class="ct-col">';
     var hw = l.needs ? hardware(l.needs) : null;
     if (hw === false) h += '<p class="ct-warnbox">' + esc(NEEDS_NOTE[l.needs]) + '</p>';
+    var tryOk = hw !== false || (l.needs === 'atc' && toolSettings() && toolSettings().source);
     h += '<div class="ct-body">' + xrefs(U(l.body)) + '</div>';
     if (l.live) h += '<div class="ct-card" data-live="' + l.live + '"></div>';
     if (l.steps) h += stepsCard(l);
-    if (l.tryIt && hw !== false) h += tryCard(l);
+    if (l.tryIt && tryOk) h += tryCard(l);
     if (l.ticks) h += ticksCard(l);
     if (l.quiz) h += quizCard(l);
     h += '<div class="ct-actions ct-end">' + (i > 0 ? '<button type="button" class="ct-btn ct-ghost" data-go="' + CT_LESSONS[i - 1].id + '">← ' + esc(CT_LESSONS[i - 1].title) + '</button>' : '<span></span>') +
@@ -2026,7 +2057,7 @@ if (typeof module !== 'undefined' && module.exports) {
     h += '<ul class="ct-checks" data-checks="' + l.id + '"></ul>';
     h += '<div class="ct-actions">';
     if (t.button === 'load') h += '<button type="button" class="ct-btn ct-ghost" id="ct-load-sample">Load the practice program</button>';
-    h += '<button type="button" class="ct-btn" data-try="' + l.id + '">' + (active ? 'Keep watching' : 'Start: shrink the tutor and watch') + '</button><span class="ct-note" id="ct-try-note"></span></div>';
+    h += '<button type="button" class="ct-btn" data-try="' + l.id + '">' + (active ? 'Keep watching' : 'Try it on the machine') + '</button><span class="ct-note" id="ct-try-note"></span></div>';
     if (l.askAfter) h += '<div class="ct-q" data-ask="' + l.id + '" hidden><span class="ct-q-text">' + esc(U(l.askAfter.q)) + '</span><div class="ct-actions"><button type="button" class="ct-btn ct-ghost" data-ask-yes>Yes</button><button type="button" class="ct-btn ct-ghost" data-ask-no>No</button></div><p class="ct-why" data-ask-why hidden></p></div>';
     return h + '</div>';
   }
@@ -2070,9 +2101,9 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   // Animated figures: a tap pauses or plays one; with reduced motion they hold their still frame.
+  function reduceMotion() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
   function setupFigs() {
-    var reduce = false;
-    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    var reduce = reduceMotion();
     ROOT.querySelectorAll('.ct-figbox svg[data-still]').forEach(function(svg) {
       if (!reduce || typeof svg.pauseAnimations !== 'function') return;
       figPause(svg, true);
@@ -2084,7 +2115,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var hint = svg.parentNode.querySelector('.ct-fighint');
     if (pause) {
       svg.pauseAnimations();
-      if (hint) hint.textContent = 'Paused: tap to play';
+      if (hint) hint.textContent = reduceMotion() ? 'A still picture (reduced motion is on): tap to play it' : 'Paused: tap to play';
     } else {
       svg.unpauseAnimations();
       if (hint) hint.textContent = 'Tap the picture to pause it';
@@ -2146,7 +2177,7 @@ if (typeof module !== 'undefined' && module.exports) {
     tool: function() {
       var m = ms(), f = st.facts;
       return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
-        '<tr><th>Tool in the spindle</th><td>' + (m.tool != null && m.tool !== '' ? 'T' + esc(m.tool) : 'not known') + '</td></tr>' +
+        '<tr><th>Tool in the spindle</th><td>' + (m.tool ? 'T' + esc(m.tool) : 'not known') + '</td></tr>' +
         '<tr><th>Its length measured</th><td>' + (m.toolLengthSet ? 'Yes' : 'No') + '</td></tr>' +
         '<tr><th>Measure after homing</th><td>' + (f.tlsAfterHome ? 'Yes (ncSender’s setting)' : 'No') + '</td></tr></table>';
     },
@@ -2193,7 +2224,7 @@ if (typeof module !== 'undefined' && module.exports) {
       return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
         '<tr><th>Tool length setter</th><td>' + (toolSettings() ? (t.tls ? 'On in ncSender' : 'Off in ncSender') : 'not known') + '</td></tr>' +
         '<tr><th>Measure after homing</th><td>' + (st.facts.tlsAfterHome ? 'Yes' : 'No') + '</td></tr>' +
-        '<tr><th>Tool in the spindle</th><td>' + (m.tool != null && m.tool !== '' ? 'T' + esc(m.tool) + (m.toolLengthSet ? ', measured' : ', not measured since it went in') : 'not known') + '</td></tr></table>';
+        '<tr><th>Tool in the spindle</th><td>' + (m.tool ? 'T' + esc(m.tool) + (m.toolLengthSet ? ', measured' : ', not measured since it went in') : 'not known') + '</td></tr></table>';
     },
     atc: function() {
       var t = toolSettings(), m = ms();
@@ -2203,16 +2234,16 @@ if (typeof module !== 'undefined' && module.exports) {
         '<tr><th>Tool changer</th><td>' + esc(CHANGERS[t.source] || (t.source ? t.source : 'none: tool changes by hand')) + '</td></tr>' +
         '<tr><th>Magazine slots</th><td>' + (t.count || 0) + '</td></tr>' +
         '<tr><th>Tool numbering</th><td>' + (t.numbering === 'toolId' ? 'Tool ID' : 'Slot') + '</td></tr>' +
-        '<tr><th>Tool in the spindle</th><td>' + (m.tool != null && m.tool !== '' ? 'T' + esc(m.tool) : 'not known') + '</td></tr></table>';
+        '<tr><th>Tool in the spindle</th><td>' + (m.tool ? 'T' + esc(m.tool) : 'not known') + '</td></tr></table>';
       if (inSlots.length) h += '<p class="ct-sub">In the magazine:</p><ul class="ct-steps">' + inSlots.slice(0, 12).map(function(x) {
-        return '<li><span class="ct-mono">Slot ' + esc(x.toolNumber) + '</span>&nbsp; <span title="' + esc(x.name) + '">' + esc(shortName(x.name)) + '</span></li>';
+        return '<li><span class="ct-mono">Slot ' + esc(x.toolNumber) + (x.toolId != null ? ' · T' + esc(x.toolId) : '') + '</span>&nbsp; <span title="' + esc(x.name) + '">' + esc(shortName(x.name)) + '</span></li>';
       }).join('') + '</ul>';
       return h;
     },
     probe3d: function() {
       var t = toolSettings() || {}, probes = (st.tools || []).filter(function(x) { return x.type === 'probe'; });
       return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
-        '<tr><th>Probe button in ncSender</th><td>' + (toolSettings() ? (t.probe ? 'On' : 'Off') : 'not known') + '</td></tr>' +
+        '<tr><th>Probe slot (Settings › Tool Changer)</th><td>' + (toolSettings() ? (t.probe ? 'On' : 'Off') : 'not known') + '</td></tr>' +
         '<tr><th>Probe tools in the library</th><td>' + (probes.length ? probes.map(function(x) { return esc(shortName(x.name)); }).join(', ') : 'none') + '</td></tr></table>';
     },
     where: function() { return '<ul class="ct-steps">' + whereAmI(st.state, st.facts).map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>'; }
@@ -2232,14 +2263,14 @@ if (typeof module !== 'undefined' && module.exports) {
   var NEEDS_NOTE = {
     tls: 'Optional on this machine: ncSender doesn’t have a tool length setter turned on (Settings › Tool Changer). Read on to see what one does; until you have one, zero Z on the stock after every bit change.',
     atc: 'Optional on this machine: no automatic tool changer is set up in ncSender, so tool changes are by hand. The first part of this lesson still applies.',
-    probe3d: 'Optional on this machine: no 3D probe is set up in ncSender (no probe tool in the library and the Probe button is off). Read on to see what one does.'
+    probe3d: 'Optional on this machine: no 3D probe is set up in ncSender (no probe tool in the library, and the Probe slot is off in Settings › Tool Changer). Read on to see what one does.'
   };
   function toolSettings() { return st.ncs && st.ncs.tool && typeof st.ncs.tool === 'object' ? st.ncs.tool : null; }
   function hardware(need) {
     var t = toolSettings();
     if (!t) return null;
-    if (need === 'tls') return !!t.tls;
-    if (need === 'atc') return /atc/i.test(String(t.source || ''));
+    if (need === 'tls') return t.tls !== false;
+    if (need === 'atc') return !!t.source && t.source !== 'com.ncsender.manualtoolchange';
     if (need === 'probe3d') return !!t.probe || (st.tools || []).some(function(x) { return x.type === 'probe'; }) || (st.ncs.probe && st.ncs.probe.type === '3d-probe');
     return null;
   }
@@ -2342,15 +2373,18 @@ if (typeof module !== 'undefined' && module.exports) {
     renderChecks();
   }
   // The Try it in progress survives the dialog closing (Escape closes it even as a card).
+  var lastKept = '';
   function keepTry() {
-    if (!st.sid) return;
-    if (!st.tracker) return local('try:' + st.sid, null);
-    var t = Object.assign({}, st.tracker, { state: null, lastIdle: null });
-    local('try:' + st.sid, { lesson: st.tryLesson, tracker: t });
+    if (!st.sid || st.sid === GUEST) return;
+    if (!st.tracker) { lastKept = ''; return local('try:' + st.sid, null); }
+    var json = JSON.stringify({ lesson: st.tryLesson, tracker: Object.assign({}, st.tracker, { state: null, lastIdle: null }) });
+    if (json === lastKept) return;
+    lastKept = json;
+    try { localStorage.setItem('ncsender.cnc-tutor.try:' + st.sid, json); } catch (e) {}
   }
   function restoreTry() {
-    var k = st.sid ? local('try:' + st.sid) : null;
-    if (!k || !k.tracker || !lessonById(k.lesson)) return;
+    var k = st.sid && st.sid !== GUEST ? local('try:' + st.sid) : null;
+    if (!k || !k.tracker || !lessonById(k.lesson) || !lessonById(k.lesson).tryIt || !k.tracker.pins) return;
     var tr = Object.assign(k.tracker, { state: st.state });
     if (runCheck(lessonById(k.lesson).tryIt.check, tr, st.facts).done) return local('try:' + st.sid, null);
     st.tracker = tr;
@@ -2358,6 +2392,8 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function setMini(on) {
     ROOT.classList.toggle('ct-mini', on);
+    var fig = ROOT.querySelector('.ct-figbox svg[data-still]');
+    if (fig && on && typeof fig.pauseAnimations === 'function') fig.pauseAnimations();
     if (!on && st.page) go(st.page);
   }
   async function loadSample() {
@@ -2381,14 +2417,14 @@ if (typeof module !== 'undefined' && module.exports) {
   // ---------- wiring ----------
   function onClick(e) {
     var fig = e.target.closest('.ct-figbox');
-    if (fig && ROOT.contains(fig)) { var svg = fig.querySelector('svg'); if (svg && svg.animationsPaused) figPause(svg, !svg.animationsPaused()); return; }
+    if (fig && ROOT.contains(fig)) { var svg = fig.querySelector('svg[data-still]'); if (svg && svg.animationsPaused) figPause(svg, !svg.animationsPaused()); return; }
     var t = e.target.closest('button, input[type="checkbox"]');
     if (!t || !ROOT.contains(t)) return;
     var a;
     if ((a = t.getAttribute('data-pick'))) {
       setStudent(a); renderNav(); restoreTry();
-      var s = student();
-      return go(st.tryLesson || (s && s.lastLesson) || 'home');
+      var s = student(), want = st.wanted; st.wanted = null;
+      return go(st.tryLesson || want || (s && s.lastLesson) || 'home');
     }
     if (t.id === 'ct-not-me') { st.ask = null; return go('students'); }
     if (t.id === 'ct-done-session') { endSession(); renderNav(); return go('students'); }
@@ -2449,14 +2485,15 @@ if (typeof module !== 'undefined' && module.exports) {
     var nm = cleanName($('ct-new-name').value), note = $('ct-add-note');
     if (!nm) { note.setAttribute('data-state', 'bad'); note.textContent = 'Type a name first.'; return; }
     if (nameTaken(cfg, nm)) { note.setAttribute('data-state', 'bad'); note.textContent = 'Someone already has that name: pick it above.'; return; }
-    var id = newStudentId(cfg), now = new Date().toISOString(), s = ctEmptyProgress();
+    var id = newStudentId(cfg, Date.now()), now = new Date().toISOString(), s = ctEmptyProgress();
     s.name = nm; s.color = nextColor(cfg); s.created = now; s.lastActive = now;
     cfg.students[id] = s; save(['students', id], s);
-    setStudent(id); renderNav(); go('home');
+    setStudent(id); renderNav(); var want = st.wanted; st.wanted = null; go(want || 'home');
   }
   function wire() {
     ROOT.addEventListener('click', onClick);
     ROOT.addEventListener('keydown', function(e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('ct-figbox')) { e.preventDefault(); e.target.click(); return; }
       if (e.key !== 'Enter') return;
       if (e.target.id === 'ct-new-name') addStudent();
       if (e.target.id === 'ct-rename') { var b = ROOT.querySelector('[data-rename-save]'); if (b) b.click(); }

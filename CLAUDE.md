@@ -15,6 +15,7 @@ APIs or any endpoint beyond firmware, settings, server-state, its own settings a
 | `lib/tutor-lessons.cjs` | `CT_LESSONS` (HTML bodies, `live` blocks, `tryIt`, quiz, docs keys), `CT_DOCS` (docs.ncsender.xyz paths), glossary. |
 | `lib/tutor-figures.cjs` | The lessons' SVGs, colored by CSS classes in config.html. |
 | `lib/tutor-program.cjs` | The practice program and `explainLine`. |
+| `lib/tutor-students.cjs` | Students: migration from 0.1, ids, `applyPatches` (the save merge), "still you?", class progress. |
 | `lib/starting-feeds.cjs` | Copied from QuickCut; keep in step. |
 
 ## How Try it works
@@ -40,3 +41,13 @@ the card. Check the docs links still resolve with `node .scripts/check-links.cjs
 
 **Releasing:** as Gears and Laser Toolbox: bump `version` in manifest.json and package.json, add `## <version>`
 to CHANGELOG.md, commit, tag `v<version>`, push the tag; `.github/workflows/release.yml` does the rest.
+
+## Students and units
+
+Progress is under `students[id]`; `current` is the machine's student (not the screen's). Every progress write
+goes through `psave` (nothing for a guest). Lesson text writes lengths as `{25 mm|1 in}` (natural values, not
+conversions); `ctUnits` picks one by ncSender's units, and figures take `facts.units`.
+
+Level 6 checks rely on ncSender's state: `Pn` has P (probe) and T (tool setter; may show as P on one-input
+machines), `isProbing` is set by the Probe dialog, `$TLS` runs as a tool change (`isToolChanging`), `tool` 0 is no
+tool. Not yet confirmed on the Pi by touching the plate, running TLS and changing a tool.

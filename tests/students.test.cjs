@@ -50,7 +50,10 @@ test('a current student who was removed is nobody', () => {
 
 test('ids, names and colors', () => {
   const cfg = { students: { s1: { name: 'Sam', color: 'teal' }, s3: { name: 'alex', color: 'blue' } } };
-  assert.strictEqual(S.newStudentId(cfg), 's2');
+  const id = S.newStudentId(cfg, Date.parse(NOW), 0.5);
+  assert.match(id, /^s[0-9a-z]+$/);
+  assert.ok(!cfg.students[id]);
+  assert.notStrictEqual(S.newStudentId(cfg, Date.parse(NOW)), S.newStudentId(cfg, Date.parse(NOW)) + 'x');
   assert.deepStrictEqual(S.studentIds(cfg), ['s3', 's1']);
   assert.strictEqual(S.cleanName('  Jo   Ann  '), 'Jo Ann');
   assert.strictEqual(S.cleanName('x'.repeat(50)).length, 30);
@@ -95,4 +98,22 @@ test('agoText', () => {
   assert.strictEqual(S.agoText(NOW, t + 3 * 3600000), '3 hours ago');
   assert.strictEqual(S.agoText(NOW, t + 26 * 3600000), 'yesterday');
   assert.strictEqual(S.agoText(NOW, t + 5 * 86400000), '5 days ago');
+});
+
+test('applyPatches: merge, delete, and no comeback for a removed student', () => {
+  const server = { corner: 'tr', current: 's1', students: { s1: { name: 'Sam', done: { a: true } } } };
+  const out = S.applyPatches(JSON.parse(JSON.stringify(server)), [
+    [['students', 's1', 'done', 'b'], true],
+    [['students', 's2', 'lastActive'], 'x'],
+    [['students', 's3'], { name: 'New', done: {} }],
+    [['page'], undefined],
+    [['current'], null]
+  ]);
+  assert.deepStrictEqual(out.students.s1.done, { a: true, b: true });
+  assert.ok(!('s2' in out.students), 'a late save for a removed student is dropped');
+  assert.strictEqual(out.students.s3.name, 'New');
+  assert.ok(!('page' in out));
+  assert.strictEqual(out.current, null);
+  assert.strictEqual(out.corner, 'tr');
+  assert.deepStrictEqual(S.applyPatches(null, [[['corner'], 'bl']]), { corner: 'bl' });
 });
