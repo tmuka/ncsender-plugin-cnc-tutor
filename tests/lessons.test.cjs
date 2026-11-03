@@ -60,3 +60,21 @@ test('every figure draws, without NaN', () => {
     }
   }
 });
+
+test('figure animations are well formed and have a still frame', () => {
+  for (const name of Object.keys(CT_FIGS)) {
+    const svg = figure(name, { homeCorner: 'front-right' });
+    assert.match(svg, /data-still="[\d.]+"/, name + ' still frame');
+    for (const m of svg.matchAll(/<animate(?:Transform|Motion)?\b([^>]*)\/?>/g)) {
+      const a = m[1], values = /values="([^"]*)"/.exec(a), times = /keyTimes="([^"]*)"/.exec(a), splines = /keySplines="([^"]*)"/.exec(a);
+      assert.match(a, /dur="[\d.]+s"/, name);
+      if (!times) continue;
+      const t = times[1].split(';').map(Number);
+      assert.strictEqual(t[0], 0, name + ' starts at 0');
+      assert.strictEqual(t[t.length - 1], 1, name + ' ends at 1');
+      for (let i = 1; i < t.length; i++) assert.ok(t[i] >= t[i - 1], name + ' keyTimes increase: ' + times[1]);
+      if (values) assert.strictEqual(values[1].split(';').length, t.length, name + ' values vs keyTimes');
+      if (splines) assert.strictEqual(splines[1].split(';').length, t.length - 1, name + ' keySplines');
+    }
+  }
+});
