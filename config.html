@@ -48,6 +48,25 @@
   .ct-mark { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--color-text-secondary) 60%, transparent); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
   .ct-nav-btn.done .ct-mark { background: var(--ct-ok); border-color: var(--ct-ok); }
   .ct-nav-btn svg { width: 18px; height: 18px; flex: none; opacity: .85; }
+  .ct-who { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--color-text-primary) 5%, transparent); }
+  .ct-who-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .ct-who-actions { display: flex; gap: 14px; }
+  .ct-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .ct-linkbtn { -webkit-appearance: none; appearance: none; background: none !important; border: none !important; padding: 4px 0 !important; min-height: 32px; color: var(--ct-accent-text) !important; font: inherit; font-size: 0.85rem; cursor: pointer; text-decoration: underline; }
+  .ct-linkbtn.ct-danger-text { color: var(--ct-danger) !important; }
+  .ct-students { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .ct-student { border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface-muted); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .ct-student.current { border-color: var(--color-accent); }
+  .ct-student-pick { -webkit-appearance: none; appearance: none; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; align-items: center; text-align: left; padding: 6px 2px !important; min-height: 64px;
+    background: none !important; border: none !important; color: var(--color-text-primary) !important; font: inherit; cursor: pointer; }
+  .ct-student-pick .ct-sub { grid-column: 2; }
+  .ct-student-name { font-size: 1.1rem; font-weight: 600; }
+  .ct-student-tools { display: flex; gap: 16px; }
+  .ct-input.ct-text { text-align: left; font-family: inherit; }
+  .ct-tablewrap { overflow-x: auto; }
+  .ct-class th, .ct-class td { white-space: nowrap; width: auto; }
+  .ct-class summary { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .ct-done-list { list-style: none; margin: 6px 0 0; padding: 0; font-weight: 400; font-size: 0.82rem; color: var(--color-text-secondary); white-space: normal; }
   .ct-sidebar-footer { padding-top: 12px; border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
   .ct-panel { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 24px 28px 40px; }
   .ct-page { display: flex; flex-direction: column; gap: var(--ct-gap); max-width: 1240px; }
@@ -216,6 +235,7 @@
         <span class="ct-title">CNC Tutor</span>
         <div class="ct-progress"><span id="ct-progress-bar"></span></div>
         <span class="ct-progress-text" id="ct-progress-text"></span>
+        <div class="ct-who" id="ct-who"></div>
       </div>
       <nav class="ct-nav" id="ct-nav"></nav>
       <div class="ct-sidebar-footer">
@@ -652,7 +672,7 @@ var CT_LEVELS = [
   { id: 3, title: 'Zero' },
   { id: 4, title: 'Running a program' },
   { id: 5, title: 'Cutting well' },
-  { id: 6, title: 'Your first part' }
+  { id: 99, title: 'Your first part', capstone: true }
 ];
 
 var CT_LESSONS = [
@@ -931,7 +951,7 @@ var CT_LESSONS = [
     docs: ['keepout'] },
 
   // ---------- Your first part ----------
-  { id: 'first-part', level: 6, title: 'Your first part', mins: 30, fig: null,
+  { id: 'first-part', level: 99, title: 'Your first part', mins: 30, fig: null,
     body:
       '<p>Everything together: a shallow pocket in a piece of scrap, made with the <strong>QuickCut</strong> plugin (install it from ncSender’s Plugins if you don’t have it). Go step by step; each links back to its lesson.</p>',
     steps: [
@@ -1300,6 +1320,124 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 /* END lib/tutor-figures.cjs */
 
+/* BEGIN lib/tutor-students.cjs */
+// Students on a shared machine, one at a time. Each student's progress is
+// kept in the plugin's settings under students[id]; `current` is the student
+// at the machine (the machine's, not the screen's), or null. A guest's
+// progress is never saved. Only a display name and a color are kept.
+
+var CT_COLORS = ['teal', 'blue', 'purple', 'pink', 'orange', 'gold', 'green', 'gray'];
+var CT_STILL_YOU_MS = 2 * 60 * 60 * 1000;
+
+function ctEmptyProgress() { return { done: {}, ticks: {}, answers: {}, firstAnswers: {}, feeds: {} }; }
+function ctHasProgress(o) {
+  return ['done', 'ticks', 'answers', 'feeds'].some(function(k) { return o[k] && typeof o[k] === 'object' && Object.keys(o[k]).length > 0; });
+}
+
+// 0.1 kept one person's progress at the top level. Move it into a first
+// student; returns the patches ([keys, value]) that make the change stick.
+function migrateSettings(cfg, nowIso) {
+  var patches = [];
+  if (!cfg.students || typeof cfg.students !== 'object') {
+    cfg.students = {};
+    if (ctHasProgress(cfg)) {
+      var s = ctEmptyProgress();
+      ['done', 'ticks', 'answers', 'feeds'].forEach(function(k) { if (cfg[k] && typeof cfg[k] === 'object') s[k] = cfg[k]; });
+      s.name = 'Student 1'; s.color = CT_COLORS[0]; s.created = nowIso; s.lastActive = nowIso;
+      cfg.students.s1 = s;
+      cfg.current = 's1';
+      patches.push([['current'], 's1']);
+    }
+    patches.push([['students'], cfg.students]);
+  }
+  ['done', 'ticks', 'answers', 'feeds', 'quiz', 'page'].forEach(function(k) {
+    if (k in cfg) { delete cfg[k]; patches.push([[k], undefined]); }
+  });
+  Object.keys(cfg.students).forEach(function(id) {
+    var s = cfg.students[id];
+    if (!s || typeof s !== 'object') { delete cfg.students[id]; return; }
+    ['done', 'ticks', 'answers', 'firstAnswers', 'feeds'].forEach(function(k) { if (!s[k] || typeof s[k] !== 'object') s[k] = {}; });
+  });
+  if (cfg.current && !cfg.students[cfg.current]) cfg.current = null;
+  return patches;
+}
+
+function studentIds(cfg) {
+  return Object.keys(cfg.students || {}).sort(function(a, b) { return String(cfg.students[a].name).localeCompare(String(cfg.students[b].name)); });
+}
+function newStudentId(cfg) {
+  var n = 1;
+  while (cfg.students['s' + n]) n++;
+  return 's' + n;
+}
+// A name as typed, tidied: trimmed, spaces collapsed, at most 30 characters.
+function cleanName(name) { return String(name || '').replace(/\s+/g, ' ').trim().slice(0, 30); }
+function nameTaken(cfg, name, exceptId) {
+  var n = cleanName(name).toLowerCase();
+  return Object.keys(cfg.students).some(function(id) { return id !== exceptId && String(cfg.students[id].name).toLowerCase() === n; });
+}
+function nextColor(cfg) {
+  var used = Object.keys(cfg.students).map(function(id) { return cfg.students[id].color; });
+  for (var i = 0; i < CT_COLORS.length; i++) if (used.indexOf(CT_COLORS[i]) < 0) return CT_COLORS[i];
+  return CT_COLORS[Object.keys(cfg.students).length % CT_COLORS.length];
+}
+
+// When the tutor opens: ask "Still you?" after a long gap since the
+// current student was last active.
+function openingView(cfg, nowMs, gapMs) {
+  var id = cfg.current, s = id && cfg.students[id];
+  if (!s) return { page: 'students' };
+  var last = Date.parse(s.lastActive || '');
+  if (isFinite(last) && nowMs - last > (gapMs || CT_STILL_YOU_MS)) return { page: 'students', ask: id };
+  return { page: 'lessons', student: id };
+}
+
+// Class progress: per student, lessons done per level, Try it steps seen and
+// the first-try quiz score.
+function classProgress(cfg, lessons, levels) {
+  return studentIds(cfg).map(function(id) {
+    var s = cfg.students[id], perLevel = {}, right = 0, asked = 0, tries = 0, tryable = 0;
+    levels.forEach(function(lv) {
+      var ls = lessons.filter(function(l) { return l.level === lv.id; });
+      perLevel[lv.id] = { done: ls.filter(function(l) { return s.done[l.id]; }).length, of: ls.length };
+    });
+    lessons.forEach(function(l) {
+      if (l.tryIt) { tryable++; if (s.done[l.id + ':try']) tries++; }
+      (l.quiz || []).forEach(function(q, qi) {
+        var a = (s.firstAnswers[l.id] || {})[qi];
+        if (a == null) return;
+        asked++;
+        if (a === q.right) right++;
+      });
+    });
+    var done = lessons.filter(function(l) { return s.done[l.id]; }).length;
+    return { id: id, name: s.name, color: s.color, done: done, of: lessons.length, perLevel: perLevel, tries: tries, tryable: tryable,
+      quizRight: right, quizAsked: asked, lastActive: s.lastActive || null, lastLesson: s.lastLesson || null };
+  });
+}
+
+// "3 hours ago", "yesterday", "12 Oct": when a student was last active.
+function agoText(iso, nowMs) {
+  var t = Date.parse(iso || '');
+  if (!isFinite(t)) return 'never';
+  var m = Math.round((nowMs - t) / 60000);
+  if (m < 2) return 'just now';
+  if (m < 60) return m + ' minutes ago';
+  var h = Math.round(m / 60);
+  if (h < 24) return h === 1 ? 'an hour ago' : h + ' hours ago';
+  var d = Math.round(h / 24);
+  if (d === 1) return 'yesterday';
+  if (d < 14) return d + ' days ago';
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { CT_COLORS: CT_COLORS, CT_STILL_YOU_MS: CT_STILL_YOU_MS, ctEmptyProgress: ctEmptyProgress, migrateSettings: migrateSettings,
+    studentIds: studentIds, newStudentId: newStudentId, cleanName: cleanName, nameTaken: nameTaken, nextColor: nextColor,
+    openingView: openingView, classProgress: classProgress, agoText: agoText };
+}
+/* END lib/tutor-students.cjs */
+
 /* BEGIN lib/starting-feeds.cjs */
 // Copied from QuickCut (GPL-3.0, siganberg/ncsender-plugin-quickcut) lib/starting-feeds.cjs; keep in step with it.
 /**
@@ -1340,9 +1478,7 @@ if (typeof module !== 'undefined' && module.exports) {
 /* END lib/starting-feeds.cjs */
 
   // ---------- settings ----------
-  var cfg = Object.assign({ done: {}, ticks: {}, answers: {}, corner: 'bl', feeds: {} },
-    initialConfig && typeof initialConfig === 'object' ? initialConfig : {});
-  ['done', 'ticks', 'answers', 'feeds'].forEach(function(k) { if (!cfg[k] || typeof cfg[k] !== 'object') cfg[k] = {}; });
+  var cfg = Object.assign({ corner: 'bl' }, initialConfig && typeof initialConfig === 'object' ? initialConfig : {});
   // Saves only what changed, onto the settings as they are now, so the tutor
   // open on two screens doesn't undo the other's progress.
   var saveTimer = null, patches = [];
@@ -1362,13 +1498,43 @@ if (typeof module !== 'undefined' && module.exports) {
     });
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(now) }).catch(function() {});
   }
+  // The student at the machine (st.sid: an id, GUEST, or null for nobody yet)
+  // and their progress P. A guest's progress lives only in this dialog.
+  var GUEST = 'guest', P = ctEmptyProgress(), lastTouch = 0;
+  migrateSettings(cfg, new Date().toISOString()).forEach(function(p) { save(p[0], p[1]); });
+  function psave(keys, value) { if (st.sid && st.sid !== GUEST) save(['students', st.sid].concat(keys), value); }
+  function student() { return st.sid && st.sid !== GUEST ? cfg.students[st.sid] : null; }
+  function setStudent(id) {
+    var now = new Date().toISOString();
+    if (id === GUEST) {
+      st.sid = GUEST; P = ctEmptyProgress();
+      if (cfg.current) { cfg.current = null; save(['current'], null); }
+    } else {
+      st.sid = id; P = cfg.students[id];
+      cfg.current = id; save(['current'], id); save(['currentSince'], now);
+      lastTouch = 0; touch();
+    }
+    st.tracker = null; st.tryLesson = null; st.ask = null;
+  }
+  function endSession() {
+    if (cfg.current) { cfg.current = null; save(['current'], null); }
+    st.sid = null; P = ctEmptyProgress(); st.tracker = null; st.tryLesson = null;
+    setMini(false);
+  }
+  // Last active, at most once a minute.
+  function touch() {
+    var s = student();
+    if (!s || Date.now() - lastTouch < 60000) return;
+    lastTouch = Date.now();
+    s.lastActive = new Date().toISOString(); psave(['lastActive'], s.lastActive);
+  }
   function local(key, value) {
     try { if (value === undefined) return JSON.parse(localStorage.getItem('ncsender.cnc-tutor.' + key)); localStorage.setItem('ncsender.cnc-tutor.' + key, JSON.stringify(value)); } catch (e) {}
     return null;
   }
 
   // ---------- what ncSender tells us (read only) ----------
-  var st = { state: {}, fw: null, ncs: {}, facts: machineFacts(null, {}, {}), tracker: null, tryLesson: null, page: null };
+  var st = { state: {}, fw: null, ncs: {}, facts: machineFacts(null, {}, {}), tracker: null, tryLesson: null, page: null, sid: null, ask: null, renaming: null };
   async function getJson(path) { var r = await fetch(BASE_URL + path); return r.ok ? r.json() : {}; }
   async function readAll() {
     var r = await Promise.all([getJson('/api/firmware').catch(function() { return {}; }), getJson('/api/settings').catch(function() { return {}; }), getJson('/api/server-state').catch(function() { return {}; })]);
@@ -1416,21 +1582,22 @@ if (typeof module !== 'undefined' && module.exports) {
   var NAV_EXTRA = [
     { id: 'machine', title: 'Your machine', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>' },
     { id: 'where', title: 'Where am I?', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>' },
+    { id: 'class', title: 'Class progress', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 6"/></svg>' },
     { id: 'glossary', title: 'Glossary', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M8 8h6M8 12h6"/></svg>' }
   ];
   function renderNav() {
     var h = '<button type="button" class="ct-nav-btn" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Start here</button>';
     CT_LEVELS.forEach(function(lv) {
-      h += '<div class="ct-nav-level">' + (lv.id <= 5 ? 'Level ' + lv.id + ': ' : '') + esc(lv.title) + '</div>';
+      h += '<div class="ct-nav-level">' + (!lv.capstone ? 'Level ' + lv.id + ': ' : '') + esc(lv.title) + '</div>';
       CT_LESSONS.filter(function(l) { return l.level === lv.id; }).forEach(function(l) {
-        h += '<button type="button" class="ct-nav-btn' + (cfg.done[l.id] ? ' done' : '') + '" data-page="' + l.id + '"><span class="ct-mark">' + (cfg.done[l.id] ? '✓' : '') + '</span>' + esc(l.title) + '</button>';
+        h += '<button type="button" class="ct-nav-btn' + (P.done[l.id] ? ' done' : '') + '" data-page="' + l.id + '"><span class="ct-mark">' + (P.done[l.id] ? '✓' : '') + '</span>' + esc(l.title) + '</button>';
       });
     });
     h += '<div class="ct-nav-level">Reference</div>';
     NAV_EXTRA.forEach(function(p) { h += '<button type="button" class="ct-nav-btn" data-page="' + p.id + '">' + p.icon + esc(p.title) + '</button>'; });
     $('ct-nav').innerHTML = h;
     markNav();
-    var n = CT_LESSONS.filter(function(l) { return cfg.done[l.id]; }).length;
+    var n = CT_LESSONS.filter(function(l) { return P.done[l.id]; }).length;
     $('ct-progress-bar').style.width = Math.round(100 * n / CT_LESSONS.length) + '%';
     $('ct-progress-text').textContent = n + ' of ' + CT_LESSONS.length + ' lessons done';
   }
@@ -1438,15 +1605,22 @@ if (typeof module !== 'undefined' && module.exports) {
     ROOT.querySelectorAll('.ct-nav-btn').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-page') === st.page); });
   }
   function nextLesson() {
-    for (var i = 0; i < CT_LESSONS.length; i++) if (!cfg.done[CT_LESSONS[i].id]) return CT_LESSONS[i];
+    for (var i = 0; i < CT_LESSONS.length; i++) if (!P.done[CT_LESSONS[i].id]) return CT_LESSONS[i];
     return null;
   }
+  var FREE_PAGES = ['students', 'class', 'machine', 'where', 'glossary'];
   function go(page) {
-    if (page !== 'home' && page !== 'machine' && page !== 'where' && page !== 'glossary' && !lessonById(page)) page = 'home';
+    if (page !== 'home' && FREE_PAGES.indexOf(page) < 0 && !lessonById(page)) page = 'home';
+    if (!st.sid && FREE_PAGES.indexOf(page) < 0) page = 'students';
+    if (page !== 'students') { st.ask = null; st.renaming = null; }
     st.page = page;
-    local('page', page);
+    if (st.sid) local('page:' + st.sid, page);
+    if (lessonById(page) && student() && student().lastLesson !== page) { student().lastLesson = page; psave(['lastLesson'], page); }
+    touch();
     var p = $('ct-panel');
-    if (page === 'home') p.innerHTML = homePage();
+    if (page === 'students') p.innerHTML = studentsPage();
+    else if (page === 'class') p.innerHTML = classPage();
+    else if (page === 'home') p.innerHTML = homePage();
     else if (page === 'machine') p.innerHTML = machinePage();
     else if (page === 'where') p.innerHTML = wherePage();
     else if (page === 'glossary') p.innerHTML = glossaryPage();
@@ -1454,7 +1628,63 @@ if (typeof module !== 'undefined' && module.exports) {
     p.scrollTop = 0;
     setupFigs();
     markNav();
+    renderWho();
     renderLive();
+  }
+
+  // ---------- students ----------
+  var COLOR_HEX = { teal: '#14b8a6', blue: '#3b82f6', purple: '#8b5cf6', pink: '#ec4899', orange: '#f97316', gold: '#eab308', green: '#22c55e', gray: '#94a3b8' };
+  function dot(color) { return '<span class="ct-dot" style="background:' + (COLOR_HEX[color] || COLOR_HEX.gray) + '"></span>'; }
+  function renderWho() {
+    var s = student(), el = $('ct-who');
+    if (!st.sid) { el.innerHTML = '<span class="ct-sub">Nobody signed in</span>'; return; }
+    el.innerHTML = '<span class="ct-who-name">' + (s ? dot(s.color) + esc(s.name) : dot('gray') + 'Guest <span class="ct-sub">(not saved)</span>') + '</span>' +
+      '<span class="ct-who-actions"><button type="button" class="ct-linkbtn" data-page="students">Switch</button><button type="button" class="ct-linkbtn" id="ct-done-session">I’m done</button></span>';
+  }
+  function studentsPage() {
+    var now = Date.now(), ids = studentIds(cfg), h = '<div class="ct-page"><span class="ct-crumb">CNC Tutor</span><h2 class="ct-h1">Who’s learning?</h2>';
+    h += '<p class="ct-sub">This machine is shared, one student at a time. Pick your name to carry on where you stopped.</p>';
+    if (st.ask && cfg.students[st.ask]) {
+      var a = cfg.students[st.ask];
+      h += '<div class="ct-card ct-try"><h3 class="ct-h2">Still you, ' + esc(a.name) + '?</h3><p>The tutor was last used ' + esc(agoText(a.lastActive, now)) + '.</p>' +
+        '<div class="ct-actions"><button type="button" class="ct-btn" data-pick="' + st.ask + '">Yes, carry on</button><button type="button" class="ct-btn ct-ghost" id="ct-not-me">No, someone else</button></div></div>';
+    }
+    h += '<div class="ct-students">';
+    ids.forEach(function(id) {
+      var s = cfg.students[id], n = CT_LESSONS.filter(function(l) { return s.done[l.id]; }).length, last = s.lastLesson && lessonById(s.lastLesson);
+      h += '<div class="ct-student' + (id === cfg.current ? ' current' : '') + '">';
+      if (st.renaming === id) {
+        h += '<div class="ct-field"><label for="ct-rename">New name</label><input class="ct-input ct-text" id="ct-rename" maxlength="30" value="' + esc(s.name) + '"></div>' +
+          '<div class="ct-actions"><button type="button" class="ct-btn" data-rename-save="' + id + '">Save</button><button type="button" class="ct-btn ct-ghost" data-rename-cancel>Cancel</button><span class="ct-note" id="ct-rename-note"></span></div>';
+      } else {
+        h += '<button type="button" class="ct-student-pick" data-pick="' + id + '">' + dot(s.color) + '<span class="ct-student-name">' + esc(s.name) + '</span>' +
+          '<span class="ct-sub">' + n + ' of ' + CT_LESSONS.length + ' lessons' + (last ? ' · last: ' + esc(last.title) : '') + '</span><span class="ct-sub">' + esc(agoText(s.lastActive, now)) + '</span></button>' +
+          '<div class="ct-student-tools"><button type="button" class="ct-linkbtn" data-rename="' + id + '">Rename</button><button type="button" class="ct-linkbtn ct-danger-text" data-remove="' + id + '">Remove</button></div>';
+      }
+      h += '</div>';
+    });
+    h += '<div class="ct-student ct-student-add"><div class="ct-field"><label for="ct-new-name">' + (ids.length ? 'Add a student' : 'Your name, to keep your progress') + '</label>' +
+      '<input class="ct-input ct-text" id="ct-new-name" maxlength="30" placeholder="A first name or nickname"></div>' +
+      '<div class="ct-actions"><button type="button" class="ct-btn" id="ct-add-student">Add and start</button><span class="ct-note" id="ct-add-note"></span></div></div>';
+    h += '<div class="ct-student"><button type="button" class="ct-student-pick" data-pick="guest">' + dot('gray') + '<span class="ct-student-name">Guest</span><span class="ct-sub">Try the lessons without saving progress</span></button></div>';
+    h += '</div><p class="ct-sub">Only a name is kept, on this machine, in CNC Tutor’s settings (and in ncSender’s backups). Anyone at the machine can pick any name: it keeps progress apart, it isn’t a login.</p></div>';
+    return h;
+  }
+  function classPage() {
+    var rows = classProgress(cfg, CT_LESSONS, CT_LEVELS), now = Date.now();
+    var h = '<div class="ct-page"><span class="ct-crumb">Reference</span><h2 class="ct-h1">Class progress</h2>';
+    if (!rows.length) return h + '<p>No students yet. Add one on <button type="button" class="ct-xref" data-page="students">Who’s learning?</button></p></div>';
+    h += '<div class="ct-tablewrap"><table class="ct-facts ct-class"><tr><td class="ct-sub">Student</td><td class="ct-sub">Lessons</td>' +
+      CT_LEVELS.map(function(lv) { return '<td class="ct-sub">' + (!lv.capstone ? 'Level ' + lv.id : 'First part') + '</td>'; }).join('') +
+      '<td class="ct-sub">Try it</td><td class="ct-sub">Quiz, first try</td><td class="ct-sub">Last active</td></tr>';
+    rows.forEach(function(r) {
+      var s = cfg.students[r.id];
+      h += '<tr' + (r.id === cfg.current ? ' class="ct-active"' : '') + '><th><details><summary>' + dot(r.color) + esc(r.name) + '</summary><ul class="ct-done-list">' +
+        CT_LESSONS.map(function(l) { return '<li>' + (s.done[l.id] ? '✓ ' : '· ') + esc(l.title) + '</li>'; }).join('') + '</ul></details></th>' +
+        '<td>' + r.done + ' of ' + r.of + '</td>' + CT_LEVELS.map(function(lv) { var c = r.perLevel[lv.id]; return '<td>' + c.done + '/' + c.of + '</td>'; }).join('') +
+        '<td>' + r.tries + ' of ' + r.tryable + '</td><td>' + (r.quizAsked ? r.quizRight + ' of ' + r.quizAsked + ' right' : '–') + '</td><td>' + esc(agoText(r.lastActive, now)) + '</td></tr>';
+    });
+    return h + '</table></div><p class="ct-sub">Quiz, first try: the first answer each student gave, from version 0.2 on. Tap a name to see their lessons.</p></div>';
   }
 
   // ---------- pages ----------
@@ -1463,13 +1693,13 @@ if (typeof module !== 'undefined' && module.exports) {
     h += '<span class="ct-crumb">CNC Tutor</span><h2 class="ct-h1">Learn your CNC, one step at a time</h2>';
     h += '<div class="ct-body"><p>Short lessons, from what X, Y and Z are to feeds and speeds, on <strong>your own machine</strong>. Each one explains an idea in plain words, then asks you to try it in ncSender: jog, home, zero. The tutor watches the machine and tells you what it saw.</p>' +
       '<p><strong>The tutor never moves the machine or sends it anything.</strong> You do every move yourself, in ncSender. During a “Try it” the tutor shrinks to a small card so you can use ncSender behind it.</p></div>';
-    h += '<div class="ct-actions"><button type="button" class="ct-btn" data-go="' + (next ? next.id : 'first-part') + '">' + (next ? (CT_LESSONS.some(function(l) { return cfg.done[l.id]; }) ? 'Continue: ' : 'Start: ') + esc(next.title) : 'All done! Review Your first part') + '</button>' +
+    h += '<div class="ct-actions"><button type="button" class="ct-btn" data-go="' + (next ? next.id : 'first-part') + '">' + (next ? (CT_LESSONS.some(function(l) { return P.done[l.id]; }) ? 'Continue: ' : 'Start: ') + esc(next.title) : 'All done! Review Your first part') + '</button>' +
       '<button type="button" class="ct-btn ct-ghost" data-go="machine">Your machine at a glance</button></div>';
     h += '<div class="ct-levels">';
     CT_LEVELS.forEach(function(lv) {
-      var ls = CT_LESSONS.filter(function(l) { return l.level === lv.id; }), n = ls.filter(function(l) { return cfg.done[l.id]; }).length;
-      h += '<button type="button" class="ct-level-card" data-go="' + ls[0].id + '"><span class="ct-crumb">' + (lv.id <= 5 ? 'Level ' + lv.id : 'Capstone') + ' · ' + n + ' of ' + ls.length + ' done</span><strong>' + esc(lv.title) + '</strong><span class="ct-sub">' +
-        (lv.id <= 5 ? ls.map(function(l) { return esc(l.title); }).join(' · ') : 'From a piece of scrap to a finished pocket, step by step') + '</span></button>';
+      var ls = CT_LESSONS.filter(function(l) { return l.level === lv.id; }), n = ls.filter(function(l) { return P.done[l.id]; }).length;
+      h += '<button type="button" class="ct-level-card" data-go="' + ls[0].id + '"><span class="ct-crumb">' + (!lv.capstone ? 'Level ' + lv.id : 'Capstone') + ' · ' + n + ' of ' + ls.length + ' done</span><strong>' + esc(lv.title) + '</strong><span class="ct-sub">' +
+        (!lv.capstone ? ls.map(function(l) { return esc(l.title); }).join(' · ') : 'From a piece of scrap to a finished pocket, step by step') + '</span></button>';
     });
     h += '</div>';
     h += '<div class="ct-card"><h3 class="ct-h2">If something looks wrong</h3><p>Hit the E-stop first and think after. Nothing in these lessons needs speed. If ncSender shows an alarm, the <button type="button" class="ct-xref" data-go="limits">Limits and alarms</button> lesson explains what to do.</p>' +
@@ -1480,7 +1710,7 @@ if (typeof module !== 'undefined' && module.exports) {
   function lessonPage(l) {
     var i = lessonIndex(l.id), lv = CT_LEVELS.filter(function(v) { return v.id === l.level; })[0];
     var h = '<div class="ct-page" data-lesson="' + l.id + '">';
-    h += '<span class="ct-crumb">' + (l.level <= 5 ? 'Level ' + l.level + ': ' : '') + esc(lv.title) + ' · lesson ' + (i + 1) + ' of ' + CT_LESSONS.length + ' · about ' + l.mins + ' min</span>';
+    h += '<span class="ct-crumb">' + (!lv.capstone ? 'Level ' + l.level + ': ' : '') + esc(lv.title) + ' · lesson ' + (i + 1) + ' of ' + CT_LESSONS.length + ' · about ' + l.mins + ' min</span>';
     h += '<h2 class="ct-h1">' + esc(l.title) + '</h2>';
     h += '<div class="ct-lesson"><div class="ct-col">';
     h += '<div class="ct-body">' + xrefs(l.body) + '</div>';
@@ -1490,7 +1720,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (l.ticks) h += ticksCard(l);
     if (l.quiz) h += quizCard(l);
     h += '<div class="ct-actions ct-end">' + (i > 0 ? '<button type="button" class="ct-btn ct-ghost" data-go="' + CT_LESSONS[i - 1].id + '">← ' + esc(CT_LESSONS[i - 1].title) + '</button>' : '<span></span>') +
-      '<button type="button" class="ct-btn" data-done="' + l.id + '">' + (i < CT_LESSONS.length - 1 ? (cfg.done[l.id] ? 'Next: ' : 'Done, next: ') + esc(CT_LESSONS[i + 1].title) + ' →' : (cfg.done[l.id] ? 'Back to the start' : 'Done!')) + '</button></div>';
+      '<button type="button" class="ct-btn" data-done="' + l.id + '">' + (i < CT_LESSONS.length - 1 ? (P.done[l.id] ? 'Next: ' : 'Done, next: ') + esc(CT_LESSONS[i + 1].title) + ' →' : (P.done[l.id] ? 'Back to the start' : 'Done!')) + '</button></div>';
     h += '</div><div class="ct-col">';
     if (l.fig) h += '<div class="ct-figbox" role="button" tabindex="0" aria-label="Pause or play the picture">' + figure(l.fig, st.facts) + '<span class="ct-fighint">Tap the picture to pause it</span></div>';
     if (l.docs && l.docs.length) h += '<div class="ct-card"><h3 class="ct-h2">In ncSender’s docs</h3><ul class="ct-links">' + l.docs.map(docLink).join('') + '</ul></div>';
@@ -1509,20 +1739,20 @@ if (typeof module !== 'undefined' && module.exports) {
     return h + '</div>';
   }
   function ticksCard(l) {
-    var t = cfg.ticks[l.id] || {};
+    var t = P.ticks[l.id] || {};
     return '<div class="ct-card"><h3 class="ct-h2">Check off</h3><div class="ct-ticks">' + l.ticks.map(function(text, k) {
       return '<label class="ct-tick"><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + '>' + esc(text) + '</label>';
     }).join('') + '</div></div>';
   }
   function stepsCard(l) {
-    var t = cfg.ticks[l.id] || {};
+    var t = P.ticks[l.id] || {};
     return '<div class="ct-card"><h3 class="ct-h2">Step by step</h3><ul class="ct-steps">' + l.steps.map(function(s, k) {
       return '<li><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + ' aria-label="Step ' + (k + 1) + ' done"><span>' + (k + 1) + '. ' + esc(s.text) +
         (s.lesson ? ' <button type="button" class="ct-xref" data-go="' + s.lesson + '">' + esc(lessonById(s.lesson).title) + '</button>' : '') + '</span></li>';
     }).join('') + '</ul></div>';
   }
   function quizCard(l) {
-    var ans = cfg.answers[l.id] || {};
+    var ans = P.answers[l.id] || {};
     return '<div class="ct-card"><h3 class="ct-h2">Check yourself</h3><div class="ct-quiz">' + l.quiz.map(function(q, qi) {
       var chosen = ans[qi];
       return '<div class="ct-q"><span class="ct-q-text">' + esc(q.q) + '</span><div class="ct-opts">' + q.a.map(function(a, ai) {
@@ -1699,7 +1929,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // ---------- feeds calculator ----------
   var MATERIAL_NAMES = { mdf: 'MDF', softwood: 'Softwood', hardwood: 'Hardwood', hdpe: 'HDPE', acrylic: 'Acrylic', polycarbonate: 'Polycarbonate', aluminum: 'Aluminum', foam: 'Foam' };
   function feedsCalc() {
-    var f = cfg.feeds, inch = st.facts.units === 'in';
+    var f = P.feeds, inch = st.facts.units === 'in';
     var bit = f.bit != null ? f.bit : inch ? '0.25' : '6', flutes = f.flutes || '2', mat = f.material || 'mdf';
     var opts = Object.keys(MATERIAL_NAMES).map(function(k) { return '<option value="' + k + '"' + (k === mat ? ' selected' : '') + '>' + MATERIAL_NAMES[k] + '</option>'; }).join('');
     return '<h3 class="ct-h2">Chip load calculator</h3><div class="ct-row">' +
@@ -1716,7 +1946,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var inch = st.facts.units === 'in', k = inch ? 25.4 : 1;
     var bit = num('ct-f-bit'), flutes = num('ct-f-flutes'), mat = $('ct-f-mat').value, rpmIn = num('ct-f-rpm'), chipIn = num('ct-f-chip');
     var feeds = { bit: $('ct-f-bit').value, flutes: $('ct-f-flutes').value, material: mat, rpm: $('ct-f-rpm').value, chip: $('ct-f-chip').value };
-    if (JSON.stringify(feeds) !== JSON.stringify(cfg.feeds)) { cfg.feeds = feeds; save(['feeds'], feeds); }
+    if (JSON.stringify(feeds) !== JSON.stringify(P.feeds)) { P.feeds = feeds; psave(['feeds'], feeds); }
     if (!bit || !flutes) { $('ct-f-out').textContent = 'Give the bit’s diameter and flutes.'; $('ct-f-start').textContent = ''; return; }
     var limits = { maxRpm: st.facts.rpm.max || undefined, minRpm: st.facts.rpm.min || undefined, maxFeed: Math.min(st.facts.maxRate.x || 4000, st.facts.maxRate.y || 4000) };
     var s = startingFeeds(bit * k, Math.round(flutes), mat, limits);
@@ -1732,16 +1962,16 @@ if (typeof module !== 'undefined' && module.exports) {
     var lists = ROOT.querySelectorAll('[data-checks]');
     var active = st.tracker && st.tryLesson ? lessonById(st.tryLesson) : null;
     var res = active ? runCheck(active.tryIt.check, st.tracker, st.facts) : null;
-    if (res && res.done && !cfg.done[active.id + ':try']) { cfg.done[active.id + ':try'] = true; save(['done', active.id + ':try'], true); }
+    if (res && res.done && !P.done[active.id + ':try']) { P.done[active.id + ':try'] = true; psave(['done', active.id + ':try'], true); }
     function items(r) {
       return r.items.map(function(it) { return '<li data-done="' + (it.done ? 1 : 0) + '"><span class="ct-badge">' + (it.done ? '✓' : '·') + '</span><span>' + esc(it.label) + (it.detail ? '<span class="ct-detail">' + esc(it.detail) + '</span>' : '') + '</span></li>'; }).join('');
     }
     lists.forEach(function(ul) {
       var id = ul.getAttribute('data-checks');
-      var h = res && id === st.tryLesson ? items(res) : cfg.done[id + ':try'] ? '<li data-done="1"><span class="ct-badge">✓</span><span>Done before. Start again to try it once more.</span></li>' : '';
+      var h = res && id === st.tryLesson ? items(res) : P.done[id + ':try'] ? '<li data-done="1"><span class="ct-badge">✓</span><span>Done before. Start again to try it once more.</span></li>' : '';
       if (ul.innerHTML !== h) ul.innerHTML = h;
       var ask = ROOT.querySelector('[data-ask="' + id + '"]');
-      if (ask) ask.hidden = !((res && id === st.tryLesson && res.done) || cfg.done[id + ':try']);
+      if (ask) ask.hidden = !((res && id === st.tryLesson && res.done) || P.done[id + ':try']);
     });
     if (active && res) {
       var h2 = items(res);
@@ -1762,15 +1992,16 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   // The Try it in progress survives the dialog closing (Escape closes it even as a card).
   function keepTry() {
-    if (!st.tracker) return local('try', null);
+    if (!st.sid) return;
+    if (!st.tracker) return local('try:' + st.sid, null);
     var t = Object.assign({}, st.tracker, { state: null, lastIdle: null });
-    local('try', { lesson: st.tryLesson, tracker: t });
+    local('try:' + st.sid, { lesson: st.tryLesson, tracker: t });
   }
   function restoreTry() {
-    var k = local('try');
+    var k = st.sid ? local('try:' + st.sid) : null;
     if (!k || !k.tracker || !lessonById(k.lesson)) return;
     var tr = Object.assign(k.tracker, { state: st.state });
-    if (runCheck(lessonById(k.lesson).tryIt.check, tr, st.facts).done) return local('try', null);
+    if (runCheck(lessonById(k.lesson).tryIt.check, tr, st.facts).done) return local('try:' + st.sid, null);
     st.tracker = tr;
     st.tryLesson = k.lesson;
   }
@@ -1803,25 +2034,50 @@ if (typeof module !== 'undefined' && module.exports) {
     var t = e.target.closest('button, input[type="checkbox"]');
     if (!t || !ROOT.contains(t)) return;
     var a;
+    if ((a = t.getAttribute('data-pick'))) {
+      setStudent(a); renderNav(); restoreTry();
+      var s = student();
+      return go(st.tryLesson || (s && s.lastLesson) || 'home');
+    }
+    if (t.id === 'ct-not-me') { st.ask = null; return go('students'); }
+    if (t.id === 'ct-done-session') { endSession(); renderNav(); return go('students'); }
+    if (t.id === 'ct-add-student') return addStudent();
+    if ((a = t.getAttribute('data-rename'))) { st.renaming = a; go('students'); var r = $('ct-rename'); if (r) { r.focus(); r.select(); } return; }
+    if (t.hasAttribute('data-rename-cancel')) { st.renaming = null; return go('students'); }
+    if ((a = t.getAttribute('data-rename-save'))) {
+      var nm = cleanName($('ct-rename').value), note = $('ct-rename-note');
+      if (!nm) { note.setAttribute('data-state', 'bad'); note.textContent = 'Give a name.'; return; }
+      if (nameTaken(cfg, nm, a)) { note.setAttribute('data-state', 'bad'); note.textContent = 'Someone already has that name.'; return; }
+      cfg.students[a].name = nm; save(['students', a, 'name'], nm); st.renaming = null; renderWho(); return go('students');
+    }
+    if ((a = t.getAttribute('data-remove'))) {
+      if (t.getAttribute('data-sure') !== '1') { t.setAttribute('data-sure', '1'); t.textContent = 'Remove ' + cfg.students[a].name + ' and their progress? Tap again'; return; }
+      if (st.sid === a) endSession();
+      delete cfg.students[a]; save(['students', a], undefined);
+      if (cfg.current === a) { cfg.current = null; save(['current'], null); }
+      local('try:' + a, null); renderNav(); return go('students');
+    }
     if ((a = t.getAttribute('data-page'))) return go(a);
     if ((a = t.getAttribute('data-go'))) return go(a);
     if ((a = t.getAttribute('data-done'))) {
       var i = lessonIndex(a);
-      cfg.done[a] = true; save(['done', a], true); renderNav();
+      P.done[a] = true; psave(['done', a], true); renderNav();
       return go(i < CT_LESSONS.length - 1 ? CT_LESSONS[i + 1].id : 'home');
     }
     if ((a = t.getAttribute('data-try'))) return startTry(a);
     if ((a = t.getAttribute('data-quiz'))) {
       var p = a.split(':'), l = lessonById(p[0]);
-      cfg.answers[p[0]] = cfg.answers[p[0]] || {};
-      cfg.answers[p[0]][p[1]] = Number(p[2]); save(['answers', p[0], p[1]], Number(p[2]));
+      P.answers[p[0]] = P.answers[p[0]] || {};
+      P.answers[p[0]][p[1]] = Number(p[2]); psave(['answers', p[0], p[1]], Number(p[2]));
+      P.firstAnswers[p[0]] = P.firstAnswers[p[0]] || {};
+      if (P.firstAnswers[p[0]][p[1]] == null) { P.firstAnswers[p[0]][p[1]] = Number(p[2]); psave(['firstAnswers', p[0], p[1]], Number(p[2])); }
       var card = t.closest('.ct-card'); card.outerHTML = quizCard(l);
       return;
     }
     if ((a = t.getAttribute('data-tick'))) {
       var q = a.split(':');
-      cfg.ticks[q[0]] = cfg.ticks[q[0]] || {};
-      cfg.ticks[q[0]][q[1]] = t.checked; save(['ticks', q[0], q[1]], t.checked);
+      P.ticks[q[0]] = P.ticks[q[0]] || {};
+      P.ticks[q[0]][q[1]] = t.checked; psave(['ticks', q[0], q[1]], t.checked);
       return;
     }
     if (t.hasAttribute('data-ask-yes') || t.hasAttribute('data-ask-no')) {
@@ -1834,11 +2090,26 @@ if (typeof module !== 'undefined' && module.exports) {
     if (t.id === 'ct-load-sample') return loadSample();
     if (t.id === 'ct-reset-progress') {
       if (t.getAttribute('data-sure') !== '1') { t.setAttribute('data-sure', '1'); t.textContent = 'Sure? Tap again to clear your progress'; return; }
-      cfg.done = {}; cfg.ticks = {}; cfg.answers = {}; save(['done'], {}); save(['ticks'], {}); save(['answers'], {}); renderNav(); go('home');
+      P.done = {}; P.ticks = {}; P.answers = {}; P.firstAnswers = {};
+      ['done', 'ticks', 'answers', 'firstAnswers'].forEach(function(k) { psave([k], {}); }); renderNav(); go('home');
     }
+  }
+  function addStudent() {
+    var nm = cleanName($('ct-new-name').value), note = $('ct-add-note');
+    if (!nm) { note.setAttribute('data-state', 'bad'); note.textContent = 'Type a name first.'; return; }
+    if (nameTaken(cfg, nm)) { note.setAttribute('data-state', 'bad'); note.textContent = 'Someone already has that name: pick it above.'; return; }
+    var id = newStudentId(cfg), now = new Date().toISOString(), s = ctEmptyProgress();
+    s.name = nm; s.color = nextColor(cfg); s.created = now; s.lastActive = now;
+    cfg.students[id] = s; save(['students', id], s);
+    setStudent(id); renderNav(); go('home');
   }
   function wire() {
     ROOT.addEventListener('click', onClick);
+    ROOT.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      if (e.target.id === 'ct-new-name') addStudent();
+      if (e.target.id === 'ct-rename') { var b = ROOT.querySelector('[data-rename-save]'); if (b) b.click(); }
+    });
     ROOT.addEventListener('input', function(e) { if (e.target.id && e.target.id.indexOf('ct-f-') === 0) updateFeeds(); });
     ROOT.addEventListener('change', function(e) { if (e.target.id === 'ct-f-mat') { $('ct-f-rpm').value = ''; $('ct-f-chip').value = ''; updateFeeds(); } });
     $('ct-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
@@ -1858,9 +2129,11 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   wire();
+  var view = openingView(cfg, Date.now());
+  if (view.page === 'lessons') setStudent(view.student); else st.ask = view.ask || null;
   renderNav();
   restoreTry();
-  go(st.tryLesson || local('page') || 'home');
+  go(st.sid ? st.tryLesson || local('page:' + st.sid) || 'home' : 'students');
   readAll().then(function() {
     if (!rootAlive()) return;
     renderNav();

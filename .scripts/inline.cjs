@@ -6,7 +6,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const file = path.join(root, 'config.html');
 let html = fs.readFileSync(file, 'utf8');
-const libs = ['lib/tutor-machine.cjs', 'lib/tutor-program.cjs', 'lib/tutor-lessons.cjs', 'lib/tutor-figures.cjs', 'lib/starting-feeds.cjs'];
+const libs = ['lib/tutor-machine.cjs', 'lib/tutor-program.cjs', 'lib/tutor-lessons.cjs', 'lib/tutor-figures.cjs', 'lib/tutor-students.cjs', 'lib/starting-feeds.cjs'];
 let stale = [];
 for (const lib of libs) {
   const begin = `/* BEGIN ${lib} */\n`, end = `/* END ${lib} */`;

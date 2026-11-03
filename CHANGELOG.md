@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Students, for a shared machine, one at a time: Who’s learning? when the tutor opens, each student’s own progress, Switch and I’m done in the sidebar, and “Still you?” after a 2-hour break. Add, rename and remove students; only a name and a color are kept.
+- Guest: try the lessons without saving progress.
+- Class progress: every student’s lessons per level, Try it steps seen, first-try quiz score and last active.
+- Your progress from 0.1 becomes Student 1 (rename it).
+
 ## 0.1.1: Animated pictures
 
 - Every lesson picture redrawn, and the ones that show motion are animated: the gantry moving X, Y and Z, homing to your home corner, jog steps, lifting before moving across, the work offset, zeroing X/Y and Z, a longer bit cutting deeper, the air cut, spinning bits throwing chips up or down, a bit cutting its chip, depth and stepover passes, climb around a part, and a profile with tabs.
