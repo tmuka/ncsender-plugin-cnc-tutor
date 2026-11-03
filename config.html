@@ -24,6 +24,7 @@
   }
   .ct-wrapper.ct-mini { width: 420px !important; max-width: calc(100vw - 40px) !important; height: auto !important; max-height: 70vh !important; }
   .ct-wrapper.ct-mini .ct-container { display: none; }
+  @media (max-width: 1100px), (max-height: 700px) { .ct-wrapper.ct-mini { width: 340px !important; max-height: 55vh !important; } .ct-minicard { padding: 12px 14px; gap: 8px; } }
   .ct-wrapper:not(.ct-mini) .ct-minicard { display: none; }
   .ct-container { display: flex; flex: 1; min-height: 0; }
   .ct-wrapper [hidden] { display: none !important; }
@@ -354,17 +355,26 @@ function startTracker(state) {
     start: { homed: !!ms.homed, workspace: String(ms.workspace || 'G54').toUpperCase(), offsets: offsets,
       job: state && state.jobLoaded ? { filename: state.jobLoaded.filename, status: state.jobLoaded.status } : null },
     lastIdle: ctStatus(ms) === 'Idle' ? ctVec(ms.MPos) : null,
-    seen: {}, jobSeen: {}, workspaces: [String(ms.workspace || 'G54').toUpperCase()], moves: [], state: state || {}
+    seen: {}, jobSeen: {}, runAfterHold: false, airZ: null, workspaces: [String(ms.workspace || 'G54').toUpperCase()], moves: [], state: state || {}
   };
 }
 function trackState(tr, state) {
   var ms = (state && state.machineState) || {}, status = ctStatus(ms);
   tr.state = state || {};
   if (status) tr.seen[status] = true;
+  if (status === 'Run' && tr.seen.Hold) tr.runAfterHold = true;
   var job = state && state.jobLoaded;
-  if (job && job.status) tr.jobSeen[(job.filename || '') + '|' + job.status] = true;
+  if (job && job.status) {
+    var key = (job.filename || '') + '|' + job.status;
+    // A completed job only counts once it was seen running since the start.
+    if (job.status !== 'completed' || tr.jobSeen[(job.filename || '') + '|running']) tr.jobSeen[key] = true;
+    if (job.status === 'running' && tr.airZ == null) { var wz = ctVec(ms.WPos); if (wz) tr.airZ = wz.z; }
+  }
   var ws = String(ms.workspace || '').toUpperCase();
   if (ws && tr.workspaces.indexOf(ws) < 0) tr.workspaces.push(ws);
+  // Homing, programs and alarms move the machine too: only Idle-to-Idle moves
+  // with nothing else in between count as jogs.
+  if (!ms.connected || /^(Home|Run|Alarm|Check|Door|Hold|Tool)$/.test(status)) { tr.lastIdle = null; return tr; }
   if (status !== 'Idle') return tr;
   var pos = ctVec(ms.MPos);
   if (!pos) return tr;
@@ -425,13 +435,14 @@ var CHECKS = {
     var held = !!tr.seen.Hold, ms = tr.state.machineState || {};
     return { items: [
       { label: 'Pause a running program (Pause, or Feed Hold)', done: held, detail: held ? 'Seen: the machine stopped in Hold.' : '' },
-      { label: 'Resume it', done: held && (tr.seen.Run || false) && ctStatus(ms) !== 'Hold', detail: '' }
+      { label: 'Resume it', done: held && tr.runAfterHold, detail: '' }
     ], get done() { return this.items[0].done && this.items[1].done; } };
   },
   airCut: function(tr) {
     var ran = !!tr.jobSeen[CT_SAMPLE_NAME + '|running'], done = !!tr.jobSeen[CT_SAMPLE_NAME + '|completed'];
     return { items: [
-      { label: 'Start the practice program with Z0 raised', done: ran || done, detail: '' },
+      { label: 'Start the practice program with Z0 raised', done: ran || done,
+        detail: tr.airZ != null && tr.airZ <= 1 ? 'Z0 didn’t look raised when it started (the bit was ' + (tr.airZ <= 0 ? 'at or below' : 'just above') + ' Z0). Stop it if it’s cutting.' : '' },
       { label: 'Watch it run to the end', done: done, detail: done ? 'Finished.' : ran ? 'Running…' : '' }
     ], done: done };
   }
@@ -447,6 +458,11 @@ function zeroCheck(tr, f, axes) {
   });
   return { items: items, done: items.every(function(i) { return i.done; }) };
 }
+// Loading a program while one runs would replace it under ncSender's feet.
+function canLoadProgram(state) {
+  var ms = (state && state.machineState) || {}, job = (state && state.jobLoaded) || {};
+  return !!ms.connected && ctStatus(ms) === 'Idle' && job.status !== 'running' && job.status !== 'paused';
+}
 function runCheck(id, tr, facts) {
   var r = CHECKS[id](tr, facts || {});
   return { items: r.items, done: !!r.done };
@@ -456,7 +472,7 @@ var CT_SAMPLE_NAME = 'CNC Tutor practice.nc';
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { fwSettings: fwSettings, ctVec: ctVec, machineFacts: machineFacts, fmtLen: fmtLen, fmtFeed: fmtFeed, workOffsets: workOffsets,
-    activeOffset: activeOffset, whereAmI: whereAmI, startTracker: startTracker, trackState: trackState, singleAxis: singleAxis, runCheck: runCheck,
+    activeOffset: activeOffset, canLoadProgram: canLoadProgram, whereAmI: whereAmI, startTracker: startTracker, trackState: trackState, singleAxis: singleAxis, runCheck: runCheck,
     CHECKS: CHECKS, CT_SAMPLE_NAME: CT_SAMPLE_NAME };
 }
 /* END lib/tutor-machine.cjs */
@@ -1138,15 +1154,31 @@ if (typeof module !== 'undefined' && module.exports) {
 /* END lib/starting-feeds.cjs */
 
   // ---------- settings ----------
-  var cfg = Object.assign({ done: {}, ticks: {}, quiz: {}, answers: {}, page: 'home', corner: 'bl', feeds: {} },
+  var cfg = Object.assign({ done: {}, ticks: {}, answers: {}, corner: 'bl', feeds: {} },
     initialConfig && typeof initialConfig === 'object' ? initialConfig : {});
-  ['done', 'ticks', 'quiz', 'answers', 'feeds'].forEach(function(k) { if (!cfg[k] || typeof cfg[k] !== 'object') cfg[k] = {}; });
-  var saveTimer = null;
-  function save() {
+  ['done', 'ticks', 'answers', 'feeds'].forEach(function(k) { if (!cfg[k] || typeof cfg[k] !== 'object') cfg[k] = {}; });
+  // Saves only what changed, onto the settings as they are now, so the tutor
+  // open on two screens doesn't undo the other's progress.
+  var saveTimer = null, patches = [];
+  function save(keys, value) {
+    patches.push([keys, value]);
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function() {
-      fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
-    }, 400);
+    saveTimer = setTimeout(flushSave, 400);
+  }
+  async function flushSave() {
+    var todo = patches; patches = [];
+    var now = await getJson('/api/plugins/' + PLUGIN_ID + '/settings').catch(function() { return null; });
+    if (!now || typeof now !== 'object') now = {};
+    todo.forEach(function(p) {
+      var o = now, keys = p[0];
+      for (var i = 0; i < keys.length - 1; i++) { if (!o[keys[i]] || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
+      o[keys[keys.length - 1]] = p[1];
+    });
+    fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(now) }).catch(function() {});
+  }
+  function local(key, value) {
+    try { if (value === undefined) return JSON.parse(localStorage.getItem('ncsender.cnc-tutor.' + key)); localStorage.setItem('ncsender.cnc-tutor.' + key, JSON.stringify(value)); } catch (e) {}
+    return null;
   }
 
   // ---------- what ncSender tells us (read only) ----------
@@ -1155,7 +1187,7 @@ if (typeof module !== 'undefined' && module.exports) {
   async function readAll() {
     var r = await Promise.all([getJson('/api/firmware').catch(function() { return {}; }), getJson('/api/settings').catch(function() { return {}; }), getJson('/api/server-state').catch(function() { return {}; })]);
     st.fw = r[0]; st.ncs = r[1] || {};
-    if (r[2] && r[2].machineState) st.state = r[2];
+    if (r[2] && r[2].machineState && !st.heard) st.state = r[2];
     st.facts = machineFacts(st.fw, st.ncs, st.state.machineState);
   }
   function ms() { return st.state.machineState || {}; }
@@ -1163,7 +1195,8 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!rootAlive()) { window.removeEventListener('message', onMessage); return; }
     if (!ev.data || ev.data.type !== 'server-state-update' || !ev.data.state) return;
     st.state = ev.data.state;
-    if (st.tracker) trackState(st.tracker, st.state);
+    st.heard = true;
+    if (st.tracker) { trackState(st.tracker, st.state); keepTry(); }
     scheduleLive();
   }
   window.addEventListener('message', onMessage);
@@ -1225,7 +1258,7 @@ if (typeof module !== 'undefined' && module.exports) {
   function go(page) {
     if (page !== 'home' && page !== 'machine' && page !== 'where' && page !== 'glossary' && !lessonById(page)) page = 'home';
     st.page = page;
-    cfg.page = page; save();
+    local('page', page);
     var p = $('ct-panel');
     if (page === 'home') p.innerHTML = homePage();
     else if (page === 'machine') p.innerHTML = machinePage();
@@ -1416,7 +1449,7 @@ if (typeof module !== 'undefined' && module.exports) {
     ROOT.querySelectorAll('[data-live]').forEach(function(el) {
       var fn = LIVE[el.getAttribute('data-live')];
       var h = fn ? fn() : null;
-      if (h != null && el.innerHTML !== h) el.innerHTML = h;
+      if (h != null && el._ctLast !== h) { el.innerHTML = h; el._ctLast = h; }
     });
     renderChecks();
     updateFeedsOnce();
@@ -1473,7 +1506,8 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!$('ct-f-bit')) return;
     var inch = st.facts.units === 'in', k = inch ? 25.4 : 1;
     var bit = num('ct-f-bit'), flutes = num('ct-f-flutes'), mat = $('ct-f-mat').value, rpmIn = num('ct-f-rpm'), chipIn = num('ct-f-chip');
-    cfg.feeds = { bit: $('ct-f-bit').value, flutes: $('ct-f-flutes').value, material: mat, rpm: $('ct-f-rpm').value, chip: $('ct-f-chip').value }; save();
+    var feeds = { bit: $('ct-f-bit').value, flutes: $('ct-f-flutes').value, material: mat, rpm: $('ct-f-rpm').value, chip: $('ct-f-chip').value };
+    if (JSON.stringify(feeds) !== JSON.stringify(cfg.feeds)) { cfg.feeds = feeds; save(['feeds'], feeds); }
     if (!bit || !flutes) { $('ct-f-out').textContent = 'Give the bit’s diameter and flutes.'; $('ct-f-start').textContent = ''; return; }
     var limits = { maxRpm: st.facts.rpm.max || undefined, minRpm: st.facts.rpm.min || undefined, maxFeed: Math.min(st.facts.maxRate.x || 4000, st.facts.maxRate.y || 4000) };
     var s = startingFeeds(bit * k, Math.round(flutes), mat, limits);
@@ -1489,7 +1523,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var lists = ROOT.querySelectorAll('[data-checks]');
     var active = st.tracker && st.tryLesson ? lessonById(st.tryLesson) : null;
     var res = active ? runCheck(active.tryIt.check, st.tracker, st.facts) : null;
-    if (res && res.done && !cfg.done[active.id + ':try']) { cfg.done[active.id + ':try'] = true; save(); }
+    if (res && res.done && !cfg.done[active.id + ':try']) { cfg.done[active.id + ':try'] = true; save(['done', active.id + ':try'], true); }
     function items(r) {
       return r.items.map(function(it) { return '<li data-done="' + (it.done ? 1 : 0) + '"><span class="ct-badge">' + (it.done ? '✓' : '·') + '</span><span>' + esc(it.label) + (it.detail ? '<span class="ct-detail">' + esc(it.detail) + '</span>' : '') + '</span></li>'; }).join('');
     }
@@ -1511,11 +1545,25 @@ if (typeof module !== 'undefined' && module.exports) {
   function startTry(id) {
     var l = lessonById(id);
     if (!ms().connected) { var n = $('ct-try-note'); if (n) { n.setAttribute('data-state', 'warn'); n.textContent = 'ncSender isn’t connected to the controller.'; } return; }
-    if (st.tryLesson !== id || !st.tracker) { st.tracker = startTracker(st.state); st.tryLesson = id; }
+    if (st.tryLesson !== id || !st.tracker) { st.tracker = startTracker(st.state); st.tryLesson = id; keepTry(); }
     $('ct-mini-title').textContent = 'Try it · ' + l.title;
     $('ct-mini-text').innerHTML = l.tryIt.text;
     setMini(true);
     renderChecks();
+  }
+  // The Try it in progress survives the dialog closing (Escape closes it even as a card).
+  function keepTry() {
+    if (!st.tracker) return local('try', null);
+    var t = Object.assign({}, st.tracker, { state: null, lastIdle: null });
+    local('try', { lesson: st.tryLesson, tracker: t });
+  }
+  function restoreTry() {
+    var k = local('try');
+    if (!k || !k.tracker || !lessonById(k.lesson)) return;
+    var tr = Object.assign(k.tracker, { state: st.state });
+    if (runCheck(lessonById(k.lesson).tryIt.check, tr, st.facts).done) return local('try', null);
+    st.tracker = tr;
+    st.tryLesson = k.lesson;
   }
   function setMini(on) {
     ROOT.classList.toggle('ct-mini', on);
@@ -1523,6 +1571,11 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   async function loadSample() {
     var note = $('ct-try-note');
+    if (!canLoadProgram(st.state)) {
+      note.setAttribute('data-state', 'warn');
+      note.textContent = ms().connected ? 'Wait until the machine is idle and no program is running or paused: loading would replace it.' : 'ncSender isn’t connected to the controller.';
+      return;
+    }
     note.removeAttribute('data-state'); note.textContent = 'Loading…';
     try {
       var res = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1543,21 +1596,21 @@ if (typeof module !== 'undefined' && module.exports) {
     if ((a = t.getAttribute('data-go'))) return go(a);
     if ((a = t.getAttribute('data-done'))) {
       var i = lessonIndex(a);
-      cfg.done[a] = true; save(); renderNav();
+      cfg.done[a] = true; save(['done', a], true); renderNav();
       return go(i < CT_LESSONS.length - 1 ? CT_LESSONS[i + 1].id : 'home');
     }
     if ((a = t.getAttribute('data-try'))) return startTry(a);
     if ((a = t.getAttribute('data-quiz'))) {
       var p = a.split(':'), l = lessonById(p[0]);
       cfg.answers[p[0]] = cfg.answers[p[0]] || {};
-      cfg.answers[p[0]][p[1]] = Number(p[2]); save();
+      cfg.answers[p[0]][p[1]] = Number(p[2]); save(['answers', p[0], p[1]], Number(p[2]));
       var card = t.closest('.ct-card'); card.outerHTML = quizCard(l);
       return;
     }
     if ((a = t.getAttribute('data-tick'))) {
       var q = a.split(':');
       cfg.ticks[q[0]] = cfg.ticks[q[0]] || {};
-      cfg.ticks[q[0]][q[1]] = t.checked; save();
+      cfg.ticks[q[0]][q[1]] = t.checked; save(['ticks', q[0], q[1]], t.checked);
       return;
     }
     if (t.hasAttribute('data-ask-yes') || t.hasAttribute('data-ask-no')) {
@@ -1570,7 +1623,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (t.id === 'ct-load-sample') return loadSample();
     if (t.id === 'ct-reset-progress') {
       if (t.getAttribute('data-sure') !== '1') { t.setAttribute('data-sure', '1'); t.textContent = 'Sure? Tap again to clear your progress'; return; }
-      cfg.done = {}; cfg.ticks = {}; cfg.answers = {}; save(); renderNav(); go('home');
+      cfg.done = {}; cfg.ticks = {}; cfg.answers = {}; save(['done'], {}); save(['ticks'], {}); save(['answers'], {}); renderNav(); go('home');
     }
   }
   function wire() {
@@ -1579,10 +1632,10 @@ if (typeof module !== 'undefined' && module.exports) {
     ROOT.addEventListener('change', function(e) { if (e.target.id === 'ct-f-mat') { $('ct-f-rpm').value = ''; $('ct-f-chip').value = ''; updateFeeds(); } });
     $('ct-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
     $('ct-mini-back').addEventListener('click', function() { setMini(false); });
-    $('ct-mini-reset').addEventListener('click', function() { st.tracker = startTracker(st.state); renderChecks(); });
+    $('ct-mini-reset').addEventListener('click', function() { st.tracker = startTracker(st.state); keepTry(); renderChecks(); });
     $('ct-mini-move').addEventListener('click', function() {
       var order = ['bl', 'tl', 'tr', 'br'], c = order[(order.indexOf(cfg.corner) + 1) % 4];
-      cfg.corner = c; ROOT.setAttribute('data-corner', c); save();
+      cfg.corner = c; ROOT.setAttribute('data-corner', c); save(['corner'], c);
     });
     ROOT.setAttribute('data-corner', ['bl', 'tl', 'tr', 'br'].indexOf(cfg.corner) >= 0 ? cfg.corner : 'bl');
   }
@@ -1595,7 +1648,13 @@ if (typeof module !== 'undefined' && module.exports) {
 
   wire();
   renderNav();
-  go(cfg.page || 'home');
-  readAll().then(function() { if (rootAlive()) { renderNav(); go(st.page); } });
+  restoreTry();
+  go(st.tryLesson || local('page') || 'home');
+  readAll().then(function() {
+    if (!rootAlive()) return;
+    renderNav();
+    var typing = ROOT.contains(document.activeElement) && /INPUT|SELECT/.test(document.activeElement.tagName);
+    if (!typing) go(st.page);
+  });
 })();
 </script>

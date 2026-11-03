@@ -124,3 +124,46 @@ test('loadSample, airCut and hold', () => {
   track(tr, [state({}, { filename: name, status: 'completed' })]);
   assert.ok(M.runCheck('airCut', tr, {}).done);
 });
+
+test('canLoadProgram: only when idle and nothing running or paused', () => {
+  assert.ok(M.canLoadProgram(state({}, { filename: 'a.nc', status: 'completed' })));
+  assert.ok(!M.canLoadProgram(state({ status: 'Run' }, { filename: 'a.nc', status: 'running' })));
+  assert.ok(!M.canLoadProgram(state({}, { filename: 'a.nc', status: 'paused' })));
+  assert.ok(!M.canLoadProgram(state({ status: 'Hold:0' })));
+  assert.ok(!M.canLoadProgram(state({ connected: false })));
+});
+
+test('hold: Stop after a pause is not a resume', () => {
+  const name = M.CT_SAMPLE_NAME;
+  const tr = track(M.startTracker(state()), [state({ status: 'Run' }, { filename: name, status: 'running' }), state({ status: 'Hold:0' }), state({}, { filename: name, status: 'stopped' })]);
+  assert.ok(!M.runCheck('hold', tr, {}).done);
+});
+
+test('airCut: an earlier completed run does not count, and an unraised Z0 is flagged', () => {
+  const name = M.CT_SAMPLE_NAME;
+  const tr = M.startTracker(state({}, { filename: name, status: 'completed' }));
+  track(tr, [state({}, { filename: name, status: 'completed' })]);
+  assert.ok(!M.runCheck('airCut', tr, {}).done);
+  track(tr, [state({ status: 'Run', WPos: '0,0,0.5,0' }, { filename: name, status: 'running' })]);
+  assert.match(M.runCheck('airCut', tr, {}).items[0].detail, /didn’t look raised/);
+  track(tr, [state({}, { filename: name, status: 'completed' })]);
+  assert.ok(M.runCheck('airCut', tr, {}).done);
+});
+
+test('homing, programs and alarms are not jogs', () => {
+  const tr = track(M.startTracker(state()), [state({ status: 'Home' }), state({ MPos: '10,20,0,0' })]);
+  assert.strictEqual(tr.moves.length, 0);
+  track(tr, [state({ status: 'Run' }), state({ MPos: '50,20,0,0' }), state({ status: 'Alarm:2' }), state({ MPos: '60,20,0,0' })]);
+  assert.strictEqual(tr.moves.length, 0);
+  track(tr, [state({ connected: false }), state({ MPos: '70,20,0,0' })]);
+  assert.strictEqual(tr.moves.length, 0);
+  track(tr, [state({ MPos: '71,20,0,0' })]);
+  assert.strictEqual(tr.moves.length, 1);
+});
+
+test('a state without positions or a workspace does not throw', () => {
+  const tr = M.startTracker({ machineState: { connected: true, status: 'Idle' } });
+  M.trackState(tr, { machineState: { connected: true, status: 'Idle' } });
+  for (const id of Object.keys(M.CHECKS)) M.runCheck(id, tr, { units: 'in' });
+  assert.ok(M.whereAmI({ machineState: { connected: true, status: 'Idle' } }, { units: 'in' }).length >= 2);
+});

@@ -22,7 +22,13 @@ APIs or any endpoint beyond firmware, settings, server-state, its own settings a
 ncSender's plugin dialog is modal. The plugin's CSS (`.plugin-dialog-backdrop:has(.ct-wrapper.ct-mini)`) makes
 the backdrop transparent and click-through and shrinks the dialog to a card in a corner, so ncSender's buttons work
 behind it. Keyboard jogging works with the dialog open anyway. State comes from the `server-state-update`
-messages ncSender posts to the dialog (full merged state).
+messages ncSender posts to the dialog (full merged state). A move counts as a jog only from Idle to Idle with no
+Home/Run/Alarm/Hold/disconnect in between. The Try it in progress is kept in localStorage (Escape closes the dialog even
+as a card) and restored on reopen unless done.
+
+**Saving:** `save(keys, value)` patches only what changed onto a fresh GET of the plugin settings (two screens).
+The page is remembered in localStorage. **Loading the practice program** is refused unless the machine is Idle and no
+job is running or paused: ncSender's `load-temp` would replace a running job.
 
 ## Testing
 
