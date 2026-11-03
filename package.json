@@ -1,0 +1,12 @@
+{
+  "name": "ncsender-plugin-cnc-tutor",
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "description": "ncSender plugin: beginner CNC lessons that watch your machine while you try each step",
+  "private": true,
+  "scripts": {
+    "test": "node .scripts/inline.cjs --check && node --test tests/*.cjs",
+    "inline": "node .scripts/inline.cjs",
+    "build": "bash .scripts/build.sh"
+  }
+}

@@ -1,0 +1,1599 @@
+<style>
+  /* The dialog's own header is hidden; the sidebar names the plugin and has Close. */
+  .plugin-dialog-header:has(+ .plugin-dialog-content .ct-wrapper) { display: none !important; }
+  .plugin-dialog-content:has(.ct-wrapper) { padding: 0 !important; }
+  .plugin-dialog-container:has(.ct-wrapper) { max-height: none !important; max-width: none !important; }
+  /* Try it: the tutor shrinks to a card in a corner and ncSender stays usable behind it. */
+  .plugin-dialog-backdrop:has(.ct-wrapper.ct-mini) { background: transparent !important; pointer-events: none !important; padding: 20px; box-sizing: border-box; }
+  .plugin-dialog-backdrop:has(.ct-wrapper.ct-mini[data-corner="bl"]) { justify-content: flex-start !important; align-items: flex-end !important; }
+  .plugin-dialog-backdrop:has(.ct-wrapper.ct-mini[data-corner="tl"]) { justify-content: flex-start !important; align-items: flex-start !important; }
+  .plugin-dialog-backdrop:has(.ct-wrapper.ct-mini[data-corner="tr"]) { justify-content: flex-end !important; align-items: flex-start !important; }
+  .plugin-dialog-backdrop:has(.ct-wrapper.ct-mini[data-corner="br"]) { justify-content: flex-end !important; align-items: flex-end !important; }
+  .plugin-dialog-container:has(.ct-wrapper.ct-mini) { pointer-events: auto; min-width: 0 !important; box-shadow: 0 12px 40px rgba(0, 0, 0, .45), 0 0 0 2px var(--color-accent) !important; }
+  .ct-wrapper {
+    --ct-gap: 14px;
+    --ct-accent-text: color-mix(in srgb, var(--color-accent) 42%, var(--color-text-primary));
+    --ct-danger: color-mix(in srgb, var(--color-danger, #e74c3c) 70%, var(--color-text-primary));
+    --ct-ok: color-mix(in srgb, var(--color-success, #2e9e6b) 70%, var(--color-text-primary));
+    --ct-warn: color-mix(in srgb, var(--color-warning, #d9a441) 38%, var(--color-text-primary));
+    --ct-btn-bg: color-mix(in srgb, var(--color-accent) 70%, #000);
+    --ct-x: #e5534b; --ct-y: #3fb950; --ct-z: #4c8dff;
+    width: calc(100vw - 48px) !important; height: calc(100vh - 48px) !important; max-width: none; max-height: none;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--color-surface); color: var(--color-text-primary); font-size: 0.95rem;
+  }
+  .ct-wrapper.ct-mini { width: 420px !important; max-width: calc(100vw - 40px) !important; height: auto !important; max-height: 70vh !important; }
+  .ct-wrapper.ct-mini .ct-container { display: none; }
+  .ct-wrapper:not(.ct-mini) .ct-minicard { display: none; }
+  .ct-container { display: flex; flex: 1; min-height: 0; }
+  .ct-wrapper [hidden] { display: none !important; }
+  .ct-wrapper ::-webkit-scrollbar { width: 8px; height: 8px; }
+  .ct-wrapper ::-webkit-scrollbar-track { background: transparent; }
+  .ct-wrapper ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-text-secondary) 45%, transparent); border-radius: 4px; }
+  .ct-wrapper input[type="checkbox"] { accent-color: var(--color-accent); width: 20px; height: 20px; flex: none; margin: 0; }
+  .ct-sidebar { display: flex; flex-direction: column; flex-shrink: 0; width: 270px; border-right: 1px solid var(--color-border); background: var(--color-surface-muted); padding: 20px 12px 14px; min-height: 0; }
+  .ct-sidebar-header { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 14px; margin-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+  .ct-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ct-accent-text); }
+  .ct-title { font-size: 1.1rem; font-weight: 600; }
+  .ct-progress { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--color-text-secondary) 25%, transparent); overflow: hidden; }
+  .ct-progress > span { display: block; height: 100%; background: var(--color-accent); width: 0; }
+  .ct-progress-text { font-size: 0.78rem; color: var(--color-text-secondary); }
+  .ct-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; flex: 1; padding-right: 2px; }
+  .ct-nav-level { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); padding: 12px 10px 4px; }
+  .ct-nav-btn { -webkit-appearance: none; appearance: none; display: flex; align-items: center; gap: 10px; padding: 8px 10px !important; width: 100%; margin: 0; text-align: left; line-height: 1.25; min-height: 38px;
+    background: transparent !important; border: none !important; border-radius: 8px !important; box-shadow: none; color: var(--color-text-secondary) !important; font: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+  .ct-nav-btn:hover { background: color-mix(in srgb, var(--color-text-primary) 5%, transparent) !important; color: var(--color-text-primary) !important; }
+  .ct-nav-btn.active { background: color-mix(in srgb, var(--color-accent) 14%, transparent) !important; color: var(--color-text-primary) !important; font-weight: 600; }
+  .ct-mark { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--color-text-secondary) 60%, transparent); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
+  .ct-nav-btn.done .ct-mark { background: var(--ct-ok); border-color: var(--ct-ok); }
+  .ct-nav-btn svg { width: 18px; height: 18px; flex: none; opacity: .85; }
+  .ct-sidebar-footer { padding-top: 12px; border-top: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .ct-panel { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 24px 28px 40px; }
+  .ct-page { display: flex; flex-direction: column; gap: var(--ct-gap); max-width: 1240px; }
+  .ct-crumb { font-size: 0.8rem; font-weight: 600; color: var(--ct-accent-text); letter-spacing: 0.04em; }
+  .ct-h1 { margin: 0 !important; font-size: 1.6rem !important; font-weight: 700 !important; color: var(--color-text-primary) !important; line-height: 1.2 !important; }
+  .ct-h2 { margin: 0 !important; font-size: 1.05rem !important; font-weight: 600 !important; color: var(--color-text-primary) !important; }
+  .ct-wrapper p { margin: 0 !important; line-height: 1.55 !important; }
+  .ct-lesson { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 24px; align-items: start; }
+  @media (max-width: 1200px) {
+    .ct-lesson { grid-template-columns: minmax(0, 1fr); }
+    .ct-lesson > .ct-col:last-child { order: -1; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+    .ct-lesson > .ct-col:last-child > * { flex: 1 1 260px; }
+    .ct-lesson .ct-figbox { max-width: 420px; }
+  }
+  .ct-col { display: flex; flex-direction: column; gap: var(--ct-gap); min-width: 0; }
+  .ct-body { display: flex; flex-direction: column; gap: 12px; font-size: 1rem; line-height: 1.55; max-width: 760px; }
+  .ct-body ul, .ct-body ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+  .ct-body strong { color: var(--color-text-primary); }
+  .ct-formula { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 1.05rem; padding: 10px 14px; border-radius: 8px; background: var(--color-surface-muted); border: 1px solid var(--color-border); align-self: flex-start; }
+  .ct-xref { color: var(--ct-accent-text); text-decoration: underline; cursor: pointer; background: none !important; border: none !important; padding: 0 !important; font: inherit; }
+  .ct-card { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .ct-card.ct-try { border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border)); }
+  .ct-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .ct-sub { color: var(--color-text-secondary) !important; font-size: 0.86rem; }
+  .ct-btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 8px 18px !important;
+    border-radius: 8px !important; border: 1px solid transparent !important; background: var(--ct-btn-bg) !important; color: #fff !important; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .ct-btn:hover { filter: brightness(1.1); }
+  .ct-btn:disabled { opacity: .45; cursor: default; filter: none; }
+  .ct-btn.ct-ghost { background: transparent !important; color: var(--ct-accent-text) !important; border-color: var(--color-border) !important; }
+  .ct-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ct-actions.ct-end { justify-content: space-between; }
+  .ct-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .ct-checks li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
+  .ct-badge { flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; background: color-mix(in srgb, var(--color-text-secondary) 55%, #000); }
+  .ct-checks li[data-done="1"] .ct-badge { background: var(--ct-ok); }
+  .ct-checks .ct-detail { display: block; color: var(--color-text-secondary); font-size: 0.84rem; }
+  .ct-ticks { display: flex; flex-direction: column; gap: 10px; }
+  .ct-tick { display: flex; gap: 10px; align-items: center; min-height: 36px; cursor: pointer; line-height: 1.35; }
+  .ct-note { font-size: 0.88rem; color: var(--color-text-secondary); }
+  .ct-note[data-state="ok"] { color: var(--ct-ok); }
+  .ct-note[data-state="bad"] { color: var(--ct-danger); }
+  .ct-note[data-state="warn"] { color: var(--ct-warn); }
+  .ct-quiz { display: flex; flex-direction: column; gap: 18px; }
+  .ct-q { display: flex; flex-direction: column; gap: 8px; }
+  .ct-q-text { font-weight: 600; }
+  .ct-opts { display: flex; flex-direction: column; gap: 6px; }
+  .ct-opt { -webkit-appearance: none; appearance: none; text-align: left; padding: 10px 14px !important; min-height: 44px; border-radius: 8px !important; border: 1px solid var(--color-border) !important;
+    background: var(--color-surface) !important; color: var(--color-text-primary) !important; font: inherit; cursor: pointer; line-height: 1.35; }
+  .ct-opt:hover { border-color: var(--color-accent) !important; }
+  .ct-opt[data-state="right"] { border-color: var(--ct-ok) !important; background: color-mix(in srgb, var(--ct-ok) 14%, var(--color-surface)) !important; }
+  .ct-opt[data-state="wrong"] { border-color: var(--ct-danger) !important; background: color-mix(in srgb, var(--ct-danger) 12%, var(--color-surface)) !important; }
+  .ct-why { font-size: 0.9rem; line-height: 1.45; padding-left: 4px; }
+  .ct-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .ct-links a { color: var(--ct-accent-text); text-decoration: none; font-weight: 500; }
+  .ct-links a:hover { text-decoration: underline; }
+  .ct-links .ct-url { display: block; font-size: 0.75rem; color: var(--color-text-secondary); word-break: break-all; }
+  .ct-figbox { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; padding: 12px; }
+  .ct-fig { width: 100%; height: auto; display: block; }
+  .ct-fig text { font: 12px Inter, system-ui, sans-serif; }
+  .ct-fig .f-txt { fill: var(--color-text-secondary); }
+  .ct-fig .f-acc-txt { fill: var(--ct-accent-text); font-weight: 600; }
+  .ct-fig .f-x-txt { fill: var(--ct-x); font-weight: 700; } .ct-fig .f-y-txt { fill: var(--ct-y); font-weight: 700; } .ct-fig .f-z-txt { fill: var(--ct-z); font-weight: 700; }
+  .ct-fig .f-bad-txt { fill: var(--ct-danger); font-weight: 600; }
+  .ct-fig .f-line { fill: none; stroke: var(--color-text-secondary); stroke-width: 2; }
+  .ct-fig .f-line-head, .ct-fig .f-dot { fill: var(--color-text-primary); }
+  .ct-fig .f-box { fill: color-mix(in srgb, var(--color-text-secondary) 10%, transparent); stroke: var(--color-text-secondary); stroke-width: 1.5; }
+  .ct-fig .f-x { stroke: var(--ct-x); stroke-width: 3; } .ct-fig .f-x-head { fill: var(--ct-x); }
+  .ct-fig .f-y { stroke: var(--ct-y); stroke-width: 3; } .ct-fig .f-y-head { fill: var(--ct-y); }
+  .ct-fig .f-z { stroke: var(--ct-z); stroke-width: 3; } .ct-fig .f-z-head { fill: var(--ct-z); }
+  .ct-fig .f-acc { fill: none; stroke: var(--color-accent); stroke-width: 2.5; } .ct-fig .f-acc-head, .ct-fig .f-acc-fill { fill: var(--color-accent); }
+  .ct-fig .f-bad { fill: none; stroke: var(--ct-danger); stroke-width: 2.5; stroke-dasharray: 6 4; }
+  .ct-fig .f-dash { stroke: var(--color-text-secondary); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .ct-fig .f-stock { fill: #c9a26b; stroke: #8a6a3d; stroke-width: 1.5; }
+  .ct-fig .f-spoil { fill: color-mix(in srgb, #c9a26b 45%, var(--color-surface)); stroke: #8a6a3d; stroke-width: 1; }
+  .ct-fig .f-clamp { fill: #7d8590; stroke: #4b525b; }
+  .ct-fig .f-bit { fill: #b8c2cc; stroke: #6b7682; stroke-width: 1.2; }
+  .ct-fig .f-paper { stroke: #f2f2f2; stroke-width: 3; }
+  .ct-fig .f-path { fill: none; stroke: var(--color-accent); stroke-width: 3; stroke-dasharray: 8 5; }
+  .ct-fig .f-tab { fill: #c9a26b; stroke: var(--color-accent); }
+  .ct-fig .f-chip { fill: #e0b878; stroke: #8a6a3d; }
+  .ct-fig .f-cutfill { fill: color-mix(in srgb, var(--color-surface) 70%, transparent); } .ct-fig .f-cutfill2 { fill: color-mix(in srgb, var(--color-surface) 40%, transparent); }
+  .ct-fig .f-red-fill { fill: #b3261e; } .ct-fig .f-red-top { fill: #e5534b; } .ct-fig .f-warn-fill { fill: #f2c94c; }
+  .ct-facts { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .ct-facts th, .ct-facts td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .ct-facts th { color: var(--color-text-secondary); font-weight: 600; width: 38%; }
+  .ct-facts td.ct-mono, .ct-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .ct-facts tr.ct-active td, .ct-facts tr.ct-active th { background: color-mix(in srgb, var(--color-accent) 12%, transparent); color: var(--color-text-primary); }
+  .ct-warnbox { border-left: 3px solid var(--ct-warn); padding: 8px 12px; background: color-mix(in srgb, var(--ct-warn) 10%, transparent); border-radius: 6px; font-size: 0.9rem; line-height: 1.45; }
+  .ct-dro { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 4px 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.95rem; align-items: baseline; }
+  .ct-dro .ct-dro-h { font-family: Inter, system-ui, sans-serif; font-size: 0.75rem; font-weight: 600; color: var(--color-text-secondary); }
+  .ct-dro .ct-ax-x { color: var(--ct-x); } .ct-dro .ct-ax-y { color: var(--ct-y); } .ct-dro .ct-ax-z { color: var(--ct-z); }
+  .ct-gcode { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; }
+  .ct-gline { -webkit-appearance: none; appearance: none; display: block; width: 100%; text-align: left; padding: 7px 12px !important; border: none !important; border-bottom: 1px solid var(--color-border) !important; border-radius: 0 !important;
+    background: var(--color-surface) !important; color: var(--color-text-primary) !important; font: 0.9rem 'JetBrains Mono', ui-monospace, monospace; cursor: pointer; }
+  .ct-gline:last-child { border-bottom: none !important; }
+  .ct-gline .ct-cmt { color: var(--color-text-secondary); }
+  .ct-gline.open { background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface)) !important; }
+  .ct-gline .ct-explain { display: none; font-family: Inter, system-ui, sans-serif; font-size: 0.88rem; color: var(--ct-accent-text); margin-top: 4px; white-space: normal; }
+  .ct-gline.open .ct-explain { display: block; }
+  .ct-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; align-items: end; }
+  .ct-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .ct-field label { font-size: 0.78rem; font-weight: 600; color: var(--color-text-secondary); letter-spacing: 0.02em; }
+  .ct-input, .ct-select { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); font: inherit; min-height: 42px; }
+  .ct-input { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
+  .ct-input:focus, .ct-select:focus { outline: none; border-color: var(--color-accent); }
+  .ct-input.ct-bad { border-color: var(--ct-danger); }
+  .ct-result { font-size: 1.15rem; font-weight: 600; }
+  .ct-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .ct-level-card { text-align: left; -webkit-appearance: none; appearance: none; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px !important; border-radius: 12px !important; border: 1px solid var(--color-border) !important;
+    background: var(--color-surface-muted) !important; color: var(--color-text-primary) !important; font: inherit; cursor: pointer; }
+  .ct-level-card:hover { border-color: var(--color-accent) !important; }
+  .ct-level-card .ct-sub { line-height: 1.4; }
+  .ct-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .ct-steps li { display: flex; gap: 10px; align-items: flex-start; }
+  .ct-map { width: 100%; max-width: 520px; height: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; }
+  .ct-map .bed { fill: color-mix(in srgb, var(--color-text-secondary) 8%, transparent); stroke: var(--color-text-secondary); }
+  .ct-map .home { fill: var(--color-text-secondary); }
+  .ct-map .spindle { fill: none; stroke: var(--color-text-primary); stroke-width: 2.5; }
+  .ct-map .zero { stroke: var(--color-accent); stroke-width: 3; }
+  .ct-map .other { stroke: var(--color-text-secondary); stroke-width: 2; opacity: .6; }
+  .ct-map text { font: 11px Inter, system-ui, sans-serif; fill: var(--color-text-secondary); }
+  .ct-map text.zl { fill: var(--ct-accent-text); font-weight: 600; }
+  .ct-gloss { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 8px 18px; align-items: baseline; }
+  .ct-gloss dt { font-weight: 600; }
+  .ct-gloss dd { margin: 0; color: var(--color-text-secondary); }
+  /* the Try it card */
+  .ct-minicard { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; overflow-y: auto; min-height: 0; }
+  .ct-minicard .ct-mini-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .ct-minicard .ct-mini-text { line-height: 1.45; }
+  .ct-minicard .ct-done-banner { font-weight: 700; color: var(--ct-ok); font-size: 1.05rem; }
+  .ct-iconbtn { -webkit-appearance: none; appearance: none; min-width: 44px; min-height: 40px; padding: 6px 10px !important; border-radius: 8px !important; border: 1px solid var(--color-border) !important; background: transparent !important; color: var(--color-text-secondary) !important; font: inherit; font-size: 0.8rem; cursor: pointer; }
+  .ct-wrapper a:focus-visible, .ct-wrapper button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+</style>
+
+<div class="ct-wrapper" data-corner="bl">
+  <div class="ct-container">
+    <aside class="ct-sidebar">
+      <div class="ct-sidebar-header">
+        <span class="ct-eyebrow">ncSender</span>
+        <span class="ct-title">CNC Tutor</span>
+        <div class="ct-progress"><span id="ct-progress-bar"></span></div>
+        <span class="ct-progress-text" id="ct-progress-text"></span>
+      </div>
+      <nav class="ct-nav" id="ct-nav"></nav>
+      <div class="ct-sidebar-footer">
+        <button type="button" class="ct-btn" id="ct-close">Close</button>
+      </div>
+    </aside>
+    <main class="ct-panel" id="ct-panel"></main>
+  </div>
+  <div class="ct-minicard" id="ct-minicard">
+    <div class="ct-mini-head">
+      <span class="ct-eyebrow" id="ct-mini-title">Try it</span>
+      <button type="button" class="ct-iconbtn" id="ct-mini-move" title="Move this card to another corner">Move ↻</button>
+    </div>
+    <p class="ct-mini-text" id="ct-mini-text"></p>
+    <ul class="ct-checks" id="ct-mini-checks"></ul>
+    <div class="ct-done-banner" id="ct-mini-done" hidden>Done! Well done.</div>
+    <p class="ct-sub" id="ct-mini-hint">Use ncSender behind this card. The tutor only watches; it never moves the machine.</p>
+    <div class="ct-actions">
+      <button type="button" class="ct-btn" id="ct-mini-back">Back to the lesson</button>
+      <button type="button" class="ct-btn ct-ghost" id="ct-mini-reset">Start over</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var FALLBACK_PORT = __SERVER_PORT__;
+  var initialConfig = __INITIAL_CONFIG__;
+  var PLUGIN_ID = 'com.tmuka.cnc-tutor';
+  var BASE_URL = (window.ncSender && typeof window.ncSender.getApiBaseUrl === 'function') ? window.ncSender.getApiBaseUrl(FALLBACK_PORT) : '';
+  var ROOT = (function() {
+    var cs = document.currentScript, prev = cs && cs.previousElementSibling;
+    if (prev && prev.classList && prev.classList.contains('ct-wrapper')) return prev;
+    var all = document.querySelectorAll('.ct-wrapper');
+    return all[all.length - 1];
+  })();
+  function rootAlive() { return !!(ROOT && ROOT.isConnected); }
+  function $(id) { return ROOT.querySelector('#' + id); }
+
+/* BEGIN lib/tutor-machine.cjs */
+// What CNC Tutor knows about the machine, read from GET /api/firmware
+// (grblHAL's $ settings), GET /api/settings (ncSender's) and the server
+// state ncSender sends the dialog. Nothing here talks to the controller:
+// the lessons tell the operator what to do in ncSender and watch the state.
+
+// The $ settings as { id: { value, format, name } }, from either shape
+// /api/firmware gives (a list, or an object keyed by id).
+function fwSettings(fw) {
+  var out = {}, s = fw && fw.settings;
+  if (!s) return out;
+  var list = Array.isArray(s) ? s : Object.keys(s).map(function(k) { var v = s[k]; return v && v.id == null ? Object.assign({ id: k }, v) : v; });
+  list.forEach(function(v) {
+    if (!v || v.id == null) return;
+    out[String(v.id)] = { value: v.value, format: String(v.format || ''), name: String(v.name || '') };
+  });
+  return out;
+}
+function ctNum(v) { var n = v === null || v === '' || v === undefined ? NaN : Number(v); return isFinite(n) ? n : null; }
+function ctBit(v, i) { var n = ctNum(v); return n != null && (n & (1 << i)) !== 0; }
+// "1.000,2.000,-3.000,0.000" (mm, as ncSender reports positions) as { x, y, z, a }.
+function ctVec(s) {
+  var p = String(s || '').split(',').map(Number);
+  if (p.length < 3 || p.slice(0, 3).some(function(n) { return !isFinite(n); })) return null;
+  return { x: p[0], y: p[1], z: p[2], a: isFinite(p[3]) ? p[3] : 0 };
+}
+
+var CT_AXES = ['x', 'y', 'z'];
+var CT_WORKSPACES = ['G54', 'G55', 'G56', 'G57', 'G58', 'G59'];
+
+// The machine as the lessons talk about it. ncs: ncSender's settings;
+// ms: the server state's machineState.
+function machineFacts(fw, ncs, ms) {
+  var S = fwSettings(fw), n = ncs || {}, m = ms || {};
+  function setting(id) { return S[id] ? S[id].value : undefined; }
+  function travel(id, key) { var v = ctNum(setting(id)); return v != null ? Math.abs(v) : ctNum(m[key]); }
+  var spindleType = null, d = S['395'];
+  if (d) spindleType = String(d.format).split(',').map(function(t) { return t.trim(); })[ctNum(d.value)] || null;
+  var safeZ = ctNum(n.safeZHeight);
+  return {
+    units: n.unitsPreference === 'imperial' ? 'in' : 'mm',
+    known: Object.keys(S).length > 0,
+    travel: { x: travel('130', 'maxTravelX'), y: travel('131', 'maxTravelY'), z: travel('132', 'maxTravelZ') },
+    maxRate: { x: ctNum(setting('110')), y: ctNum(setting('111')), z: ctNum(setting('112')) },
+    homing: S['22'] ? ctBit(setting('22'), 0) : null,
+    homingRequired: S['22'] ? ctBit(setting('22'), 2) : null,
+    homeCorner: typeof n.homeLocation === 'string' ? n.homeLocation : null,
+    softLimits: S['20'] ? ctNum(setting('20')) === 1 : null,
+    hardLimits: S['21'] ? ctBit(setting('21'), 0) : null,
+    pullOff: ctNum(setting('27')),
+    rpm: { min: ctNum(setting('31')), max: ctNum(setting('30')) },
+    laserMode: S['32'] ? ctNum(setting('32')) === 1 : null,
+    spindleType: spindleType,
+    safeZ: safeZ,
+    park: ctVec(n.parkingLocation),
+    tlsAfterHome: !!n.tlsAfterHome,
+    axes: String(m.axes || 'XYZ')
+  };
+}
+
+// A length in mm shown in the operator's units.
+function fmtLen(mm, units, digits) {
+  if (mm == null || !isFinite(mm)) return '?';
+  var v = units === 'in' ? mm / 25.4 : mm;
+  var dg = digits != null ? digits : units === 'in' ? 3 : 2;
+  var s = v.toFixed(dg);
+  if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  if (s === '-0') s = '0';
+  return s + (units === 'in' ? ' in' : ' mm');
+}
+// A feed in mm/min shown in the operator's units.
+function fmtFeed(mmMin, units) {
+  if (mmMin == null || !isFinite(mmMin)) return '?';
+  return units === 'in' ? (mmMin / 25.4).toFixed(1).replace(/\.0$/, '') + ' in/min' : Math.round(mmMin) + ' mm/min';
+}
+
+function ctStatus(ms) { return String((ms && ms.status) || '').split(':')[0]; }
+
+// The six work offsets with the active one marked.
+function workOffsets(ms) {
+  var m = ms || {}, active = String(m.workspace || 'G54').toUpperCase();
+  return CT_WORKSPACES.map(function(w) { return { name: w, offset: ctVec(m[w.toLowerCase()]), active: w === active }; });
+}
+function activeOffset(ms) {
+  var w = String((ms && ms.workspace) || 'G54').toLowerCase();
+  return ctVec(ms && ms[w]);
+}
+
+// The live state in a few plain sentences ("Where am I").
+function whereAmI(state, facts) {
+  var ms = (state && state.machineState) || {}, u = (facts && facts.units) || 'mm', out = [];
+  if (!ms.connected) return ['ncSender isn’t connected to the controller, so there’s nothing to read yet.'];
+  var status = ctStatus(ms);
+  var words = { Idle: 'idle, ready for a command', Run: 'running a move or a program', Hold: 'on hold (paused): Resume continues, Stop ends it',
+    Jog: 'jogging', Alarm: 'in alarm: it stopped and won’t move until the alarm is cleared', Door: 'stopped because the safety door is open',
+    Home: 'homing', Check: 'in check mode (reading G-code without moving)', Sleep: 'asleep', Tool: 'changing tools' };
+  out.push('The machine is ' + (words[status] || (status || 'in an unknown state').toLowerCase()) + '.');
+  out.push(ms.homed ? 'It’s homed, so its machine coordinates are true.' : 'It isn’t homed yet, so its machine coordinates may not be where they read.');
+  var wpos = ctVec(ms.WPos), ws = String(ms.workspace || 'G54').toUpperCase();
+  if (wpos) {
+    var parts = [];
+    function side(v, plus, minus) { return Math.abs(v) < 0.0005 ? null : (v > 0 ? plus : minus) + ' by ' + fmtLen(Math.abs(v), u); }
+    var px = side(wpos.x, 'right', 'left'), py = side(wpos.y, 'behind', 'in front');
+    if (px) parts.push(px);
+    if (py) parts.push(py);
+    out.push(parts.length ? 'The spindle is off X0 Y0 of ' + ws + ': ' + parts.join(' and ') + '.' : 'The spindle is right over X0 Y0 of ' + ws + '.');
+    if (Math.abs(wpos.z) < 0.0005) out.push('The bit’s tip is at Z0.');
+    else out.push('The bit’s tip is ' + fmtLen(Math.abs(wpos.z), u) + (wpos.z > 0 ? ' above' : ' below') + ' Z0' + (wpos.z < 0 ? ' (into the stock, if Z0 is its top).' : '.'));
+  }
+  if (ms.tool != null && ms.tool !== '') out.push('Tool ' + ms.tool + ' is in the spindle' + (ms.toolLengthSet ? ', and its length is measured.' : ', and its length isn’t measured since it went in.'));
+  var job = state && state.jobLoaded;
+  if (job && job.filename) out.push('Program loaded: ' + job.filename + (job.status && job.status !== 'idle' ? ' (' + job.status + ')' : '') + '.');
+  return out;
+}
+
+// ---------- watching for what a lesson asks ----------
+// A tracker remembers the state when a "Try it" started and every move
+// since: a move is the change in machine position from one Idle to the next.
+function startTracker(state) {
+  var ms = (state && state.machineState) || {};
+  var offsets = {};
+  workOffsets(ms).forEach(function(w) { offsets[w.name] = w.offset; });
+  return {
+    start: { homed: !!ms.homed, workspace: String(ms.workspace || 'G54').toUpperCase(), offsets: offsets,
+      job: state && state.jobLoaded ? { filename: state.jobLoaded.filename, status: state.jobLoaded.status } : null },
+    lastIdle: ctStatus(ms) === 'Idle' ? ctVec(ms.MPos) : null,
+    seen: {}, jobSeen: {}, workspaces: [String(ms.workspace || 'G54').toUpperCase()], moves: [], state: state || {}
+  };
+}
+function trackState(tr, state) {
+  var ms = (state && state.machineState) || {}, status = ctStatus(ms);
+  tr.state = state || {};
+  if (status) tr.seen[status] = true;
+  var job = state && state.jobLoaded;
+  if (job && job.status) tr.jobSeen[(job.filename || '') + '|' + job.status] = true;
+  var ws = String(ms.workspace || '').toUpperCase();
+  if (ws && tr.workspaces.indexOf(ws) < 0) tr.workspaces.push(ws);
+  if (status !== 'Idle') return tr;
+  var pos = ctVec(ms.MPos);
+  if (!pos) return tr;
+  if (tr.lastIdle) {
+    var d = { x: pos.x - tr.lastIdle.x, y: pos.y - tr.lastIdle.y, z: pos.z - tr.lastIdle.z };
+    if (CT_AXES.some(function(k) { return Math.abs(d[k]) > 0.0005; })) tr.moves.push(d);
+  }
+  tr.lastIdle = pos;
+  return tr;
+}
+// The axis a move went along, when only one moved: { axis: 'x', d: 10 }.
+function singleAxis(d) {
+  var moved = CT_AXES.filter(function(k) { return Math.abs(d[k]) > 0.0005; });
+  return moved.length === 1 ? { axis: moved[0], d: d[moved[0]] } : null;
+}
+
+// Each check: (tracker, facts) -> { items: [{ label, done, detail }], done }.
+var CHECKS = {
+  axes: function(tr, f) {
+    var u = f.units, items = CT_AXES.map(function(k) {
+      var A = k.toUpperCase(), plus = null, minus = null;
+      tr.moves.forEach(function(d) { var s = singleAxis(d); if (s && s.axis === k) { if (s.d > 0) plus = s.d; else minus = s.d; } });
+      return { label: 'Jog ' + A + '+ once', done: plus != null,
+        detail: plus != null ? A + ' went up ' + fmtLen(plus, u, u === 'in' ? 4 : 3) + ': that’s ' + A + '+.' : minus != null ? 'That was ' + A + '−: the number went down ' + fmtLen(-minus, u, u === 'in' ? 4 : 3) + '. Try the ' + A + '+ button.' : '' };
+    });
+    return { items: items, done: items.every(function(i) { return i.done; }) };
+  },
+  home: function(tr) {
+    var ms = tr.state.machineState || {};
+    var did = !!tr.seen.Home || (!tr.start.homed && !!ms.homed);
+    return { items: [{ label: 'Home the machine', done: did && !!ms.homed && ctStatus(ms) === 'Idle',
+      detail: tr.seen.Home && ctStatus(ms) === 'Home' ? 'Homing now…' : did ? 'Homed: every axis found its switch.' : tr.seen.Alarm ? 'An alarm came up. The Limits and alarms lesson explains it.' : '' }],
+      get done() { return this.items[0].done; } };
+  },
+  jogSizes: function(tr, f) {
+    var sizes = [];
+    tr.moves.forEach(function(d) { var s = singleAxis(d); if (!s) return; var r = Math.round(Math.abs(s.d) * 1000) / 1000; if (sizes.indexOf(r) < 0) sizes.push(r); });
+    var items = [0, 1, 2].map(function(i) {
+      return { label: i === 0 ? 'A jog with one step size' : i === 1 ? 'A jog with a second step size' : 'A jog with a third step size', done: sizes[i] != null,
+        detail: sizes[i] != null ? 'Moved ' + fmtLen(sizes[i], f.units, f.units === 'in' ? 4 : 3) + '.' : '' };
+    });
+    return { items: items, done: sizes.length >= 3 };
+  },
+  workspace: function(tr) {
+    var ms = tr.state.machineState || {}, now = String(ms.workspace || 'G54').toUpperCase(), other = tr.workspaces.filter(function(w) { return w !== tr.start.workspace; });
+    return { items: [
+      { label: 'Switch to another work offset', done: other.length > 0, detail: other.length ? 'Seen ' + other.join(', ') + '.' : '' },
+      { label: 'Switch back to ' + tr.start.workspace, done: other.length > 0 && now === tr.start.workspace, detail: other.length && now !== tr.start.workspace ? now + ' is active.' : '' }
+    ], get done() { return this.items[0].done && this.items[1].done; } };
+  },
+  zeroXY: function(tr, f) { return zeroCheck(tr, f, ['x', 'y']); },
+  zeroZ: function(tr, f) { return zeroCheck(tr, f, ['z']); },
+  loadSample: function(tr) {
+    var job = tr.state.jobLoaded || {}, ok = job.filename === CT_SAMPLE_NAME;
+    return { items: [{ label: 'Load the practice program', done: ok, detail: ok ? 'It’s in the visualizer.' : job.filename ? 'Loaded now: ' + job.filename + '.' : '' }], done: ok };
+  },
+  hold: function(tr) {
+    var held = !!tr.seen.Hold, ms = tr.state.machineState || {};
+    return { items: [
+      { label: 'Pause a running program (Pause, or Feed Hold)', done: held, detail: held ? 'Seen: the machine stopped in Hold.' : '' },
+      { label: 'Resume it', done: held && (tr.seen.Run || false) && ctStatus(ms) !== 'Hold', detail: '' }
+    ], get done() { return this.items[0].done && this.items[1].done; } };
+  },
+  airCut: function(tr) {
+    var ran = !!tr.jobSeen[CT_SAMPLE_NAME + '|running'], done = !!tr.jobSeen[CT_SAMPLE_NAME + '|completed'];
+    return { items: [
+      { label: 'Start the practice program with Z0 raised', done: ran || done, detail: '' },
+      { label: 'Watch it run to the end', done: done, detail: done ? 'Finished.' : ran ? 'Running…' : '' }
+    ], done: done };
+  }
+};
+// Did the active work offset's zero change on these axes since the start?
+function zeroCheck(tr, f, axes) {
+  var ms = tr.state.machineState || {}, ws = String(ms.workspace || 'G54').toUpperCase();
+  var was = tr.start.offsets[ws], now = activeOffset(ms), wpos = ctVec(ms.WPos);
+  var items = axes.map(function(k) {
+    var A = k.toUpperCase(), changed = !!(was && now && Math.abs(now[k] - was[k]) > 0.0005);
+    return { label: 'Zero ' + A + ' (in ' + ws + ')', done: changed,
+      detail: changed ? A + '0 is now at machine ' + A + ' ' + fmtLen(now[k], f.units) + (wpos && Math.abs(wpos[k]) < 0.0005 ? ', right where the spindle is.' : '.') : '' };
+  });
+  return { items: items, done: items.every(function(i) { return i.done; }) };
+}
+function runCheck(id, tr, facts) {
+  var r = CHECKS[id](tr, facts || {});
+  return { items: r.items, done: !!r.done };
+}
+
+var CT_SAMPLE_NAME = 'CNC Tutor practice.nc';
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { fwSettings: fwSettings, ctVec: ctVec, machineFacts: machineFacts, fmtLen: fmtLen, fmtFeed: fmtFeed, workOffsets: workOffsets,
+    activeOffset: activeOffset, whereAmI: whereAmI, startTracker: startTracker, trackState: trackState, singleAxis: singleAxis, runCheck: runCheck,
+    CHECKS: CHECKS, CT_SAMPLE_NAME: CT_SAMPLE_NAME };
+}
+/* END lib/tutor-machine.cjs */
+
+/* BEGIN lib/tutor-program.cjs */
+// The practice program the G-code, Check before you cut and Air cut lessons
+// load into ncSender (nothing runs until the operator presses Start), and
+// a plain-words reading of a G-code line.
+
+// A 40 x 30 mm rectangle and a circle, 0.5 mm deep, in mm (G21) whatever the
+// operator's units: X0 Y0 is the rectangle's front-left corner, Z0 the stock top.
+function practiceProgram() {
+  return [
+    '(CNC Tutor practice program: a 40 x 30 mm rectangle and a circle, 0.5 mm deep)',
+    '(X0 Y0 is the front-left corner of the rectangle, Z0 the top of the stock)',
+    'G21 (millimeters)',
+    'G90 (absolute positions)',
+    'G17 (arcs in the XY plane)',
+    'G0 Z5 (up to 5 mm above the stock)',
+    'M3 S18000 (spindle on, clockwise, 18000 RPM)',
+    'G4 P3 (wait 3 seconds for the spindle)',
+    'G0 X0 Y0 (rapid over the start corner)',
+    'G1 Z-0.5 F300 (plunge 0.5 mm into the stock)',
+    'G1 X40 F1000 (cut along the front)',
+    'G1 Y30 (cut up the right side)',
+    'G1 X0 (cut along the back)',
+    'G1 Y0 (cut down the left side, back to the start)',
+    'G0 Z5 (lift out of the cut)',
+    'G0 X20 Y8 (rapid to the bottom of the circle)',
+    'G1 Z-0.5 F300 (plunge)',
+    'G2 X20 Y8 I0 J7 F1000 (a full clockwise circle around X20 Y15)',
+    'G0 Z5 (lift out)',
+    'M5 (spindle off)',
+    'G0 X0 Y0 (back over X0 Y0)',
+    'M30 (end of the program)'
+  ];
+}
+
+var CT_G = {
+  0: 'Rapid move (G0): as fast as the machine goes, never for cutting',
+  1: 'Straight cut (G1) at the feed rate',
+  2: 'Clockwise arc (G2)', 3: 'Counterclockwise arc (G3)',
+  4: 'Pause (G4) for P seconds',
+  17: 'Arcs in the XY plane (G17)', 18: 'Arcs in the XZ plane (G18)', 19: 'Arcs in the YZ plane (G19)',
+  20: 'Units are inches (G20)', 21: 'Units are millimeters (G21)',
+  28: 'Go to the stored G28 position (G28)',
+  40: 'Cutter compensation off (G40)',
+  43.1: 'Tool length offset (G43.1): shifts Z by the tool’s length',
+  49: 'Tool length offset off (G49)',
+  53: 'This line’s position is in machine coordinates (G53)',
+  54: 'Use work offset G54', 55: 'Use work offset G55', 56: 'Use work offset G56', 57: 'Use work offset G57', 58: 'Use work offset G58', 59: 'Use work offset G59',
+  80: 'Canned cycle off (G80)', 81: 'Drill cycle (G81)', 83: 'Peck drill cycle (G83)',
+  90: 'Positions are absolute (G90): measured from zero',
+  91: 'Positions are relative (G91): measured from where the bit is',
+  94: 'Feed is per minute (G94)'
+};
+var CT_M = {
+  0: 'Program pause (M0)', 1: 'Optional pause (M1)', 2: 'End of the program (M2)',
+  3: 'Spindle on, clockwise (M3)', 4: 'Spindle on, counterclockwise (M4)', 5: 'Spindle off (M5)',
+  6: 'Tool change (M6)', 7: 'Mist coolant on (M7)', 8: 'Flood coolant on (M8)', 9: 'Coolant off (M9)',
+  30: 'End of the program (M30)'
+};
+
+// One line in plain words: { code, comment, parts: [ 'Rapid move…', 'to X0 Y0' ] }.
+function explainLine(line) {
+  var s = String(line || ''), comments = [], m;
+  var code = s.replace(/\(([^)]*)\)|;(.*)$/g, function(all, a, b) { comments.push((a != null ? a : b).trim()); return ' '; }).trim().toUpperCase();
+  var words = [], re = /([A-Z])\s*([-+]?\d*\.?\d+)/g;
+  while ((m = re.exec(code))) words.push({ l: m[1], v: Number(m[2]), raw: m[1] + m[2] });
+  var parts = [], axes = [], arc = [];
+  words.forEach(function(w) {
+    if (w.l === 'G') parts.push(CT_G[w.v] || 'G' + w.v);
+    else if (w.l === 'M') parts.push(CT_M[w.v] || 'M' + w.v);
+    else if (w.l === 'X' || w.l === 'Y' || w.l === 'Z' || w.l === 'A') axes.push(w.raw);
+    else if (w.l === 'I' || w.l === 'J' || w.l === 'K') arc.push(w.raw);
+    else if (w.l === 'F') parts.push('feed rate ' + w.v + ' per minute (F)');
+    else if (w.l === 'S') parts.push('spindle speed ' + w.v + ' RPM (S)');
+    else if (w.l === 'T') parts.push('tool ' + w.v + ' (T)');
+    else if (w.l === 'P') parts.push('P' + w.v);
+    else if (w.l === 'N') parts.push('line number ' + w.v + ' (N)');
+    else parts.push(w.raw);
+  });
+  if (axes.length) parts.push('to ' + axes.join(' '));
+  if (arc.length) parts.push('the arc’s center is ' + arc.join(' ') + ' from its start (I, J)');
+  if (!words.length && comments.length) parts.push('A comment: the machine ignores it');
+  return { code: code, comment: comments.join(' '), parts: parts };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { practiceProgram: practiceProgram, explainLine: explainLine };
+}
+/* END lib/tutor-program.cjs */
+
+/* BEGIN lib/tutor-lessons.cjs */
+// The lessons: the idea in plain words, a figure, what this machine has
+// (data-live blocks the dialog fills from the live state), a "Try it" the
+// dialog watches for (CHECKS in tutor-machine.cjs), things to tick, a quiz
+// and links to ncSender's docs. Text is HTML; [[id]] links another lesson.
+
+var CT_DOCS_BASE = 'https://docs.ncsender.xyz';
+var CT_DOCS = {
+  'setup-wizard': { label: 'Machine Setup Wizard', path: '/getting-started/setup-wizard/' },
+  'wizard-travel': { label: 'Setup Wizard: travel', path: '/getting-started/setup-wizard/#travel' },
+  'wizard-switches': { label: 'Setup Wizard: switches and probe', path: '/getting-started/setup-wizard/#switches-probe' },
+  'wizard-homing': { label: 'Setup Wizard: homing', path: '/getting-started/setup-wizard/#homing' },
+  'wizard-safety': { label: 'Setup Wizard: safety', path: '/getting-started/setup-wizard/#safety' },
+  'status': { label: 'Check the machine status', path: '/getting-started/interface-overview/#check-the-machine-status' },
+  'jog-homing': { label: 'Jog controls: homing', path: '/features/jog-controls/#homing' },
+  'homing-required': { label: 'Jog controls: homing requirement', path: '/features/jog-controls/#homing-requirement' },
+  'alarms-unlock': { label: 'Alarms: unlocking', path: '/settings/alarms/#unlocking' },
+  'alarm-list': { label: 'Alarms: the alarm list', path: '/settings/alarms/#alarm-list' },
+  'alarm-power-on': { label: 'Alarms: power-on E-stop check', path: '/settings/alarms/#power-on-e-stop-check' },
+  'clear-alarm': { label: 'Clear an alarm', path: '/getting-started/interface-overview/#clear-an-alarm' },
+  'jog-steps': { label: 'Jog controls: step sizes', path: '/features/jog-controls/#step-sizes' },
+  'jog-feeds': { label: 'Jog controls: feed rates', path: '/features/jog-controls/#feed-rates' },
+  'jog-continuous': { label: 'Jog controls: continuous jog', path: '/features/jog-controls/#continuous-jog' },
+  'jog-keys': { label: 'Jog controls: keyboard and gamepad', path: '/features/jog-controls/#keyboard-and-gamepad' },
+  'gamepad': { label: 'Controls: set up a gamepad', path: '/settings/controls/#set-up-a-gamepad' },
+  'pendant': { label: 'Pendant: jog', path: '/accessories/pendant/#jog' },
+  'go-to-zero': { label: 'Jog controls: Go to zero and Park', path: '/features/jog-controls/#go-to-zero-park' },
+  'dro-zero': { label: 'DRO: setting work zeros', path: '/features/dro/#setting-work-zeros-long-press' },
+  'dro-enter': { label: 'DRO: entering a coordinate', path: '/features/dro/#entering-a-specific-coordinate-double-click-double-tap' },
+  'zero-axis': { label: 'Zero an axis', path: '/getting-started/interface-overview/#zero-an-axis' },
+  'multi-workspace': { label: 'Multi-Workspace (Pro)', path: '/features/multi-workspace/' },
+  'probe-block': { label: 'Probing: standard block', path: '/features/probing/#standard-block' },
+  'probe-dialog': { label: 'Probing: the probe dialog', path: '/features/probing/#using-the-probe-dialog' },
+  'probe-types': { label: 'Probing: probe types', path: '/features/probing/#probe-types' },
+  'tls': { label: 'Tool changer: tool length setter', path: '/features/tool-changer/#tool-length-setter-tls' },
+  'tool-measure': { label: 'Tool changer: measuring tool length', path: '/features/tool-changer/#tool-length-measuring' },
+  'faq-order': { label: 'FAQ: home, probe and change tools in what order?', path: '/faq/#what-order-should-i-home-probe-and-change-tools-in' },
+  'faq-plunged': { label: 'FAQ: the bit plunged after a tool change', path: '/faq/#the-bit-plunged-into-the-work-after-the-first-tool-change' },
+  'load': { label: 'Visualizer: loading a file', path: '/features/visualizer/#loading-a-file' },
+  'view': { label: 'Visualizer: changing the view', path: '/features/visualizer/#changing-the-view' },
+  'out-of-bounds': { label: 'Visualizer: out-of-bounds warning', path: '/features/visualizer/#out-of-bounds-warning' },
+  'run': { label: 'Visualizer: running a job', path: '/features/visualizer/#running-a-job' },
+  'overrides': { label: 'Visualizer: overrides', path: '/features/visualizer/#overrides' },
+  'spindle': { label: 'Visualizer: spindle control', path: '/features/visualizer/#spindle-control' },
+  'gcode-preview': { label: 'G-code preview', path: '/features/gcode-preview/' },
+  'start-from-line': { label: 'G-code preview: Start From Line', path: '/features/gcode-preview/#start-from-line' },
+  'tool-library': { label: 'Tool library', path: '/features/tool-library/' },
+  'quickcut': { label: 'QuickCut plugin', path: '/plugins/quickcut/' },
+  'safety-door': { label: 'Safety door', path: '/features/safety-door/' },
+  'keepout': { label: 'Keepout zone', path: '/features/keepout-zone/' },
+  'faq-new': { label: 'FAQ: I have a new controller, where do I start?', path: '/faq/#i-have-a-new-controller-where-do-i-start' }
+};
+
+var CT_LEVELS = [
+  { id: 1, title: 'The machine' },
+  { id: 2, title: 'Moving' },
+  { id: 3, title: 'Zero' },
+  { id: 4, title: 'Running a program' },
+  { id: 5, title: 'Cutting well' },
+  { id: 6, title: 'Your first part' }
+];
+
+var CT_LESSONS = [
+  // ---------- Level 1: the machine ----------
+  { id: 'safety', level: 1, title: 'Safety first', mins: 4, fig: 'estop',
+    body:
+      '<p>A CNC router is a fast spinning blade on a robot that does exactly what it’s told, even when that’s wrong. It doesn’t feel the bit hitting a clamp or your hand. Most accidents come from a few habits, so they come first.</p>' +
+      '<ul>' +
+      '<li><strong>Know your E-stop.</strong> The red mushroom button cuts power to the motors and spindle at once. Hit it the moment anything looks or sounds wrong: a clamp in the path, smoke, a bit breaking, the machine heading somewhere you didn’t expect. Don’t reach for the mouse first.</li>' +
+      '<li><strong>Stop is not the E-stop.</strong> ncSender’s Stop and Pause are software: fine for a program you want to end, but they rely on the computer and the controller working. The E-stop doesn’t.</li>' +
+      '<li><strong>Never leave a running job.</strong> Stay where you can reach the E-stop. Fires start from a dull bit rubbing in wood dust.</li>' +
+      '<li><strong>Protect yourself.</strong> Safety glasses, hearing protection for the spindle and the cut, and a dust mask or a dust collector: fine wood and MDF dust harm your lungs.</li>' +
+      '<li><strong>Nothing loose near the bit.</strong> Long hair tied back, no gloves, loose sleeves or jewelry near a spinning bit. Keep hands out of the machine while the spindle turns, even to clear chips.</li>' +
+      '<li><strong>Hold the work down.</strong> A part that comes loose is thrown. [[workholding]] covers it.</li>' +
+      '</ul>' +
+      '<p>ncSender can check that the E-stop is released when it powers on and can pause on an open safety door; see the links below.</p>',
+    ticks: ['I found my E-stop and can reach it from where I stand', 'I know Stop in ncSender is not the same as the E-stop', 'I have safety glasses and hearing protection by the machine'],
+    quiz: [
+      { q: 'The bit is heading for a clamp. What do you do?', a: ['Press Pause in ncSender', 'Hit the E-stop', 'Lift the bit with the jog buttons'], right: 1,
+        why: 'The E-stop stops everything at once without relying on the computer. Pause takes a moment and depends on the software.' },
+      { q: 'Is it OK to brush chips away from the bit while it’s cutting?', a: ['Yes, if you’re careful', 'No: wait until the spindle has stopped'], right: 1,
+        why: 'A spinning bit catches a brush, a glove or a sleeve faster than you can pull back.' }
+    ],
+    docs: ['alarm-power-on', 'safety-door', 'wizard-safety'] },
+
+  { id: 'axes', level: 1, title: 'X, Y and Z', mins: 4, fig: 'axes', live: 'axes',
+    body:
+      '<p>Your machine moves in three straight lines called <strong>axes</strong>. Standing in front of it:</p>' +
+      '<ul><li><strong>X</strong> is left and right. <strong>X+</strong> moves the spindle to the right.</li>' +
+      '<li><strong>Y</strong> is toward you and away. <strong>Y+</strong> moves the spindle away from you, to the back.</li>' +
+      '<li><strong>Z</strong> is up and down. <strong>Z+</strong> lifts the bit up, away from the work. <strong>Z−</strong> goes down, into it.</li></ul>' +
+      '<p>A position is three numbers, one per axis, like X100 Y50 Z10. The numbers grow in the + direction. Z− is the one to respect: it’s the direction that cuts, and the one that crashes.</p>' +
+      '<p>On some machines the gantry moves instead of the table, but X+ still means the bit goes right relative to the work. If a jog goes the wrong way, the machine’s direction settings are wrong; ncSender’s Setup Wizard fixes them.</p>',
+    tryIt: { check: 'axes', text: 'Jog <strong>X+</strong>, <strong>Y+</strong> and <strong>Z+</strong> once each, a small step. Watch which way the spindle goes. Make sure it has room to move first.' },
+    askAfter: { q: 'Did X+ go right, Y+ go to the back, and Z+ go up?', no: 'If an axis went the other way, its direction is set backwards. Run ncSender’s Setup Wizard (Settings) and fix it before you cut anything: a program would come out mirrored or plunge the wrong way.' },
+    quiz: [
+      { q: 'Which direction cuts into the stock?', a: ['Z+', 'Z−', 'Y+'], right: 1, why: 'Z− goes down, toward the work.' },
+      { q: 'You want the spindle closer to you. Which jog?', a: ['Y+', 'Y−', 'X−'], right: 1, why: 'Y+ goes away from you, so Y− comes toward you.' }
+    ],
+    docs: ['wizard-travel', 'status'] },
+
+  { id: 'homing', level: 1, title: 'Machine coordinates and homing', mins: 5, fig: 'home', live: 'homing',
+    body:
+      '<p>When the controller powers on, it doesn’t know where the spindle is. It just calls wherever it is “zero”. <strong>Homing</strong> fixes that: each axis moves slowly until it touches its limit switch, then backs off a little. That spot is the machine’s own fixed origin, called <strong>home</strong>.</p>' +
+      '<p>Positions measured from home are <strong>machine coordinates</strong> (ncSender shows them as MPos). They never change: X100 in machine coordinates is the same place on the table every day. That’s what lets ncSender remember zeros, a park spot and a tool setter’s location between sessions.</p>' +
+      '<ul><li>Home every time you power on, and after an E-stop or an alarm that lost position.</li>' +
+      '<li>Z homes first, going up, so the bit is lifted before X and Y move.</li>' +
+      '<li>If a motor skipped (a crash, a stall), the machine’s idea of where it is is wrong. Homing again puts it right.</li></ul>',
+    tryIt: { check: 'home', text: 'Make sure nothing is in the way of the spindle, then press <strong>Home</strong> in ncSender and watch each axis find its switch.' },
+    quiz: [
+      { q: 'Why home after powering on?', a: ['It warms up the motors', 'So the machine knows where it is: machine coordinates are true again', 'It clears the program'], right: 1,
+        why: 'Until it homes, the controller only knows where it was when it powered on, not where that is on the table.' },
+      { q: 'Which axis homes first, and why?', a: ['X, because it’s first', 'Z, so the bit is lifted before it moves across'], right: 1, why: 'Lifting first keeps the bit from dragging across clamps or the work.' }
+    ],
+    docs: ['jog-homing', 'homing-required', 'wizard-homing'] },
+
+  { id: 'limits', level: 1, title: 'Limits and alarms', mins: 5, fig: null, live: 'limits',
+    body:
+      '<p>Every axis can only go so far. Two kinds of limit keep it inside:</p>' +
+      '<ul><li><strong>Soft limits</strong> are in the controller’s settings: the travel of each axis, measured from home. A jog or program that would go past them is refused before the machine moves. They only work after homing.</li>' +
+      '<li><strong>Hard limits</strong> are the limit switches: if one is pressed while the machine moves, everything stops at once.</li></ul>' +
+      '<p>When something goes wrong, the controller stops and goes into <strong>Alarm</strong>: a limit was hit, a probe didn’t touch, homing failed, the E-stop was pressed. An alarm means “I stopped because I might not be where you think.” ncSender shows the alarm’s number and what it means.</p>' +
+      '<p><strong>Unlocking</strong> clears the alarm without homing. Do that only when you know why it happened and that the position is still right. After a hard limit, an E-stop or a crash, <strong>home instead</strong>: the position may be off.</p>',
+    quiz: [
+      { q: 'A program stops with a hard limit alarm in the middle of a cut. What next?', a: ['Unlock and press Start again', 'Find out why, then home before running anything', 'Turn soft limits off'], right: 1,
+        why: 'A hard limit stops the motors suddenly, which can lose steps. Homing makes the position true again. Then find out why the program went there (wrong zero, a program too big for the stock).' },
+      { q: 'Soft limits work…', a: ['Always', 'Only after homing'], right: 1, why: 'They’re measured from home, so the controller has to know where home is.' }
+    ],
+    docs: ['alarms-unlock', 'alarm-list', 'clear-alarm', 'wizard-switches'] },
+
+  // ---------- Level 2: moving ----------
+  { id: 'jogging', level: 2, title: 'Jogging', mins: 5, fig: 'jog',
+    body:
+      '<p><strong>Jogging</strong> is moving the machine by hand from ncSender, to put the bit where you want it: over a corner of the stock, down to touch its top, out of the way.</p>' +
+      '<ul><li><strong>Step jog:</strong> each press moves exactly one step, like 10, 1 or 0.1 mm. Use big steps to travel and small ones as you get close.</li>' +
+      '<li><strong>Continuous jog:</strong> hold the button (or key) and the axis moves until you let go. Fast for long moves, risky near the work.</li>' +
+      '<li><strong>Jog feed</strong> is how fast it moves. Slow down near the stock.</li>' +
+      '<li>You can also jog from the keyboard, a gamepad or the ncSender pendant.</li></ul>' +
+      '<p>Near the stock, always use small steps going down in Z. A 10 mm step at the wrong moment drives the bit into the work or the table.</p>',
+    tryIt: { check: 'jogSizes', text: 'Pick a step size and jog any axis once. Then do the same with two other step sizes. Watch how far each one goes.' },
+    quiz: [
+      { q: 'The bit is 3 mm above the stock and you want to touch it. Which step?', a: ['10 mm', '1 mm, then 0.1 mm', 'Continuous jog down'], right: 1, why: 'Close to the work, small steps can’t overshoot.' }
+    ],
+    docs: ['jog-steps', 'jog-continuous', 'jog-feeds', 'jog-keys', 'gamepad', 'pendant'] },
+
+  { id: 'out-of-the-way', level: 2, title: 'Getting out of the way', mins: 3, fig: 'safez', live: 'safe',
+    body:
+      '<p>The most common crash is a move across the table with the bit too low: it hits a clamp, a screw or the edge of the stock. The rule: <strong>lift Z first, then move X and Y.</strong></p>' +
+      '<ul><li><strong>Safe Z</strong> is a height ncSender lifts to before moving across, set in ncSender’s settings.</li>' +
+      '<li><strong>Go to zero</strong> takes the bit back over X0 Y0 (lifting first).</li>' +
+      '<li><strong>Park</strong> moves the spindle to a spot you choose, out of the way, so you can load stock or change the bit.</li></ul>' +
+      '<p>Programs follow the same rule: before each move across, they rapid up to a safe height above the stock and the clamps.</p>',
+    quiz: [
+      { q: 'The bit is touching the stock top and you want to go back to X0 Y0. First:', a: ['Move X and Y', 'Lift Z'], right: 1, why: 'Lifting first clears the stock and any clamps between here and there.' }
+    ],
+    docs: ['go-to-zero'] },
+
+  // ---------- Level 3: zero ----------
+  { id: 'work-coordinates', level: 3, title: 'Work coordinates', mins: 6, fig: 'wcs', live: 'offsets',
+    body:
+      '<p>Machine coordinates are measured from home, but your stock could be anywhere on the table. So a program isn’t written in machine coordinates. It’s written from a point on the stock you choose, like its front-left corner on top: the <strong>work zero</strong>, X0 Y0 Z0.</p>' +
+      '<p>Before you run a program, you tell the machine where that point is: you jog the bit there and press <strong>Zero</strong>. The controller stores how far work zero is from home, the <strong>work offset</strong>. From then on, every position in the program is the work offset plus the program’s number: <strong>work position</strong> (WPos).</p>' +
+      '<p>The controller keeps <strong>six</strong> work offsets, named G54 to G59. G54 is the one used unless a program says otherwise. The others let you keep zeros for several jigs or vises on the table at once and switch between them.</p>' +
+      '<p>The table below is your machine’s six offsets right now, in machine coordinates.</p>',
+    tryIt: { check: 'workspace', optional: true, text: 'Switch to another work offset in ncSender (for example G55), see the DRO’s numbers change while the machine doesn’t move, then switch back.' },
+    quiz: [
+      { q: 'You moved the stock 50 mm to the right. What changes?', a: ['The program', 'The work offset: zero it again on the stock', 'The machine coordinates of home'], right: 1,
+        why: 'The program is written from the stock’s corner. Zero again on the corner and the same program cuts in the new place.' },
+      { q: 'A program doesn’t name a work offset. Which one does it use?', a: ['Always G54', 'Whichever is active in the controller now', 'Machine coordinates'], right: 1,
+        why: 'The controller starts in G54, but it keeps whichever was selected last. Check the work offset ncSender shows before you run.' }
+    ],
+    docs: ['dro-zero', 'multi-workspace'] },
+
+  { id: 'zero-xy', level: 3, title: 'Zero X and Y', mins: 5, fig: 'xyzero', live: 'zeromap',
+    body:
+      '<p>Where X0 Y0 goes on the stock is decided when the program is made (in your CAM or plugin): usually the <strong>front-left corner</strong> or the <strong>center</strong>. Zero must go on the same spot, or the whole cut moves.</p>' +
+      '<ul><li><strong>On a corner:</strong> jog the bit over the corner, low enough to see it’s right on the edge (use small steps), then zero X and Y.</li>' +
+      '<li><strong>On the center:</strong> find the center (draw the diagonals, or zero on a corner and move half the size), then zero there.</li>' +
+      '<li><strong>With a probe:</strong> a touch probe or block finds the corner by touching the edges, more exactly than by eye.</li></ul>' +
+      '<p>The visualizer shows the program’s origin as a marker: check it’s where you zeroed before you run.</p>',
+    tryIt: { check: 'zeroXY', text: 'Jog over a spot you can see, like the corner of a piece of scrap, and zero X and Y there in ncSender. Lift Z first if the bit is low.' },
+    quiz: [
+      { q: 'The program’s origin is the center of the stock, but you zeroed on the front-left corner. What happens?', a: ['It cuts in the right place', 'The cut is shifted: half of it falls off the stock'], right: 1, why: 'The program draws around its origin. With the origin on the corner, most of it hangs off the stock.' }
+    ],
+    docs: ['zero-axis', 'dro-zero', 'probe-dialog'] },
+
+  { id: 'zero-z', level: 3, title: 'Zero Z', mins: 5, fig: 'zzero',
+    body:
+      '<p>Z0 is usually the <strong>top of the stock</strong>: a 3 mm deep pocket then goes to Z−3. Some programs use the <strong>spoilboard</strong> (the bottom of the stock) instead, so a cut through always stops at the same place. The program and the zero must agree.</p>' +
+      '<ul><li><strong>Paper method:</strong> with the spindle off, slide a sheet of paper under the bit and lower it in 0.1 mm steps until the paper just drags. Zero Z, remembering the paper is about 0.1 mm thick.</li>' +
+      '<li><strong>Touch plate:</strong> lay the plate on the stock, clip the magnet to the bit, and probe. ncSender lowers until the bit touches and subtracts the plate’s thickness.</li></ul>' +
+      '<p>Never zero Z with the spindle running, and keep the bit clean: a chip under the tip makes every cut shallower.</p>',
+    tryIt: { check: 'zeroZ', text: 'Lower the bit onto a piece of scrap (paper method or touch plate) and zero Z in ncSender. Then lift a few millimeters.' },
+    quiz: [
+      { q: 'Z0 is the stock top. The program cuts to Z−6 in 6 mm stock. What happens?', a: ['It cuts exactly through', 'It cuts through, just touching the spoilboard; a little deeper is usual'], right: 1,
+        why: 'Z−6 is the bottom of 6 mm stock. Programs usually go a bit deeper (Z−6.2) to cut cleanly through into the spoilboard.' }
+    ],
+    docs: ['zero-axis', 'probe-block', 'probe-types'] },
+
+  { id: 'tool-length', level: 3, title: 'A new bit needs a new Z', mins: 5, fig: 'tlo', live: 'tool',
+    body:
+      '<p>Z0 is where <strong>the tip of the bit</strong> touched. Put in another bit and its tip is somewhere else: a longer bit sticks out further. Without doing anything, the next cut goes deeper or shallower by the difference. That’s the most common way to cut too deep after a tool change.</p>' +
+      '<ul><li><strong>Simplest:</strong> after every bit change, zero Z again (paper or touch plate). Leave X and Y alone.</li>' +
+      '<li><strong>With a tool length setter:</strong> a fixed switch on the table. The machine measures each bit on it, and the controller shifts Z by the difference, a <strong>tool length offset</strong>. Z0 then stays right for every bit.</li></ul>' +
+      '<p>Two habits: measure (or rezero) every time a bit goes into the collet, even the same bit; and after homing, measure the bit before you trust Z.</p>',
+    quiz: [
+      { q: 'You changed to a longer bit and didn’t rezero Z. The program cuts…', a: ['To the right depth', 'Deeper than it should', 'Shallower'], right: 1, why: 'The longer bit’s tip is lower, so every Z goes deeper by the difference in length.' }
+    ],
+    docs: ['tls', 'tool-measure', 'faq-order', 'faq-plunged'] },
+
+  // ---------- Level 4: running a program ----------
+  { id: 'gcode', level: 4, title: 'G-code in five minutes', mins: 6, fig: null, live: 'gcode',
+    body:
+      '<p>A program is a text file of <strong>G-code</strong>: one command per line, each a letter and a number. You don’t need to write it (your CAM or a plugin does), but reading a few lines helps you spot trouble.</p>' +
+      '<ul><li><strong>G0</strong> rapid, fast, never cutting. <strong>G1</strong> cut in a straight line. <strong>G2 / G3</strong> cut an arc, clockwise or counterclockwise.</li>' +
+      '<li><strong>X Y Z</strong> where to go. <strong>F</strong> the feed rate, <strong>S</strong> the spindle speed.</li>' +
+      '<li><strong>M3</strong> spindle on, <strong>M5</strong> spindle off, <strong>M30</strong> end.</li>' +
+      '<li><strong>G21 / G20</strong> millimeters or inches. <strong>G90</strong> absolute positions (from zero), <strong>G91</strong> relative (from here).</li>' +
+      '<li>Anything in (parentheses) is a comment.</li></ul>' +
+      '<p>Here’s the practice program the next lessons use. Tap a line to read it in words.</p>',
+    quiz: [
+      { q: 'Which line cuts?', a: ['G0 X40 Y0', 'G1 X40 Y0 F1000'], right: 1, why: 'G1 moves at the feed rate F: a cut. G0 is a rapid, as fast as the machine goes.' },
+      { q: 'A program in inches (G20) runs with your machine set to millimeters. Is that a problem?', a: ['Yes, it comes out 25.4 times too big', 'No: the program says G20, and the controller follows it'], right: 1,
+        why: 'The G20 or G21 at the top tells the controller the program’s units. Check it’s there, and that the numbers look the right size.' }
+    ],
+    docs: ['gcode-preview'] },
+
+  { id: 'check', level: 4, title: 'Check before you cut', mins: 5, fig: null,
+    body:
+      '<p>Most ruined parts could have been caught before pressing Start. When a program loads, the <strong>visualizer</strong> draws its path. Check:</p>' +
+      '<ul><li><strong>The origin marker</strong> is where you mean to zero (the stock’s corner or center).</li>' +
+      '<li><strong>The size</strong> is what you expect: the rulers show it. A part 25 times too big means a units mix-up.</li>' +
+      '<li><strong>It fits on the stock</strong> and doesn’t pass over clamps or screws.</li>' +
+      '<li><strong>The depth</strong> in the side view: no deeper than the stock, unless you mean to cut through.</li>' +
+      '<li><strong>The out-of-bounds warning:</strong> ncSender warns when the program would go past the machine’s travel from the current zero.</li>' +
+      '<li>The bit and the run time in the header make sense.</li></ul>',
+    tryIt: { check: 'loadSample', button: 'load', text: 'Load the practice program. It only loads: nothing moves until you press Start. Close the tutor and find its origin, its 40 × 30 mm rectangle and its depth in the visualizer.' },
+    quiz: [
+      { q: 'In the side view, the path goes 10 mm below the stock’s bottom. What now?', a: ['Run it, the spoilboard will take it', 'Stop: the depth or the Z zero is wrong'], right: 1, why: 'A through cut goes a fraction of a millimeter into the spoilboard, not 10 mm. Something is set wrong.' }
+    ],
+    docs: ['load', 'view', 'out-of-bounds'] },
+
+  { id: 'air-cut', level: 4, title: 'The air cut', mins: 6, fig: 'aircut',
+    body:
+      '<p>An <strong>air cut</strong> runs the program with the bit above the stock, so you can watch the whole path without cutting anything. It’s the best way to catch a clamp in the way, a wrong zero or a surprise move.</p>' +
+      '<ol><li>Zero X, Y and Z as you will for the real cut.</li>' +
+      '<li>Jog Z <strong>up 25 mm</strong> and zero Z there. Now the program’s Z0 is 25 mm above the stock, so every cut happens in the air.</li>' +
+      '<li>Run the program, with the spindle off or on, and watch: does it stay over the stock and away from the clamps?</li>' +
+      '<li>When it ends, lower Z back onto the stock and <strong>zero Z again</strong> before the real cut. Forgetting this is the classic mistake: the real cut then happens 25 mm in the air.</li></ol>' +
+      '<p>For the practice program, use a piece of scrap or no stock at all.</p>',
+    tryIt: { check: 'airCut', text: 'Load the practice program (Check before you cut), raise Z0 25 mm as above, then run it and watch it to the end. Lower Z and rezero after.' },
+    ticks: ['After the air cut, I put Z0 back on the stock'],
+    quiz: [
+      { q: 'The air cut is done. Before the real cut you must…', a: ['Press Start', 'Lower the bit and zero Z on the stock again'], right: 1, why: 'Z0 is still 25 mm in the air from the air cut.' }
+    ],
+    docs: ['run', 'zero-axis'] },
+
+  { id: 'pause-stop', level: 4, title: 'Pause, stop and resume', mins: 5, fig: null,
+    body:
+      '<ul><li><strong>Pause</strong> (feed hold) slows the machine to a stop on the path, keeping its place. <strong>Resume</strong> carries on. Good for looking closer, clearing chips (spindle stopped) or checking a clamp.</li>' +
+      '<li><strong>Stop</strong> ends the program. Starting again starts from the top.</li>' +
+      '<li><strong>Overrides</strong> change the feed and spindle speed while the program runs, as a percentage. Slow down if it chatters or the cut sounds strained; speed up if it’s timid.</li>' +
+      '<li><strong>Start From Line</strong> restarts partway through, for example after a broken bit. Be careful: it starts at the line you choose, so the spindle, Z and the position must be right for it.</li>' +
+      '<li>The <strong>E-stop</strong> is for danger, not for ending a job.</li></ul>',
+    tryIt: { check: 'hold', optional: true, text: 'During an air cut, press Pause, wait, then Resume.' },
+    quiz: [
+      { q: 'The cut is screeching and the bit is smoking. First:', a: ['Turn the feed override up', 'Pause, then find out why (a dull bit, feed too slow, wrong speed)', 'Keep going and see'], right: 1, why: 'Smoke means heat: rubbing instead of cutting. Stop it, then fix the feeds or the bit. If anything is on fire, E-stop.' }
+    ],
+    docs: ['run', 'overrides', 'start-from-line'] },
+
+  // ---------- Level 5: cutting well ----------
+  { id: 'bits', level: 5, title: 'Bits', mins: 5, fig: 'bits',
+    body:
+      '<p>A router bit (end mill) is chosen by what it cuts and how it leaves the edge:</p>' +
+      '<ul><li><strong>Flat end</strong> for pockets and profiles: square bottom and walls.</li>' +
+      '<li><strong>Ball end</strong> for 3D carving: a round tip that leaves smooth curves.</li>' +
+      '<li><strong>V-bit</strong> for engraving, sign lettering and chamfers: the deeper it goes, the wider the line.</li>' +
+      '<li><strong>Upcut</strong> spirals lift chips out (clean bottom, fuzzy top edge). <strong>Downcut</strong> pushes them down (clean top edge, chips packed in the slot). <strong>Compression</strong> bits do both, for plywood.</li>' +
+      '<li><strong>Flutes</strong> are the cutting edges. One or two flutes clear chips well in plastic and wood on a hobby machine; more flutes suit harder materials.</li></ul>' +
+      '<p>Cutting length matters too: a bit can only cut as deep as its flutes, and a longer bit bends more. Use the shortest bit that reaches.</p>',
+    quiz: [
+      { q: 'You want a clean top edge cutting plywood. Which bit?', a: ['Upcut', 'Downcut or compression'], right: 1, why: 'A downcut pushes the top fibers down instead of tearing them up.' }
+    ],
+    docs: ['tool-library'] },
+
+  { id: 'feeds-speeds', level: 5, title: 'Feeds and speeds', mins: 8, fig: 'chip', live: 'feeds',
+    body:
+      '<p>Two numbers set how a bit cuts: <strong>spindle speed</strong> (RPM) and <strong>feed rate</strong> (how fast it moves through the work). What matters is the <strong>chip load</strong>: how thick a chip each cutting edge takes.</p>' +
+      '<p class="ct-formula">feed = RPM × flutes × chip load</p>' +
+      '<ul><li><strong>Too small a chip</strong> (slow feed, high RPM): the edge rubs instead of cutting. Heat, burn marks, a dull bit, dust instead of chips, even fire.</li>' +
+      '<li><strong>Too big a chip</strong> (fast feed): the bit is overloaded. Chatter, a rough edge, the machine straining, broken bits.</li>' +
+      '<li><strong>Just right:</strong> chips, not dust; a steady, even sound; the bit warm, not hot.</li></ul>' +
+      '<p>Start from the table below (the same starting points QuickCut, Gears and Spoilboard Toolbox use), make a test cut, then adjust by listening and looking at the chips. To go faster, raise the feed and keep the RPM: bigger chips carry the heat away.</p>',
+    quiz: [
+      { q: 'The cut makes fine dust and leaves burn marks. Most likely:', a: ['The chip load is too small: feed up or RPM down', 'The chip load is too big'], right: 0, why: 'Dust and heat mean the edge is rubbing. A thicker chip carries the heat away.' },
+      { q: 'At 18000 RPM, 2 flutes and 0.05 mm chip load, the feed is…', a: ['900 mm/min', '1800 mm/min', '3600 mm/min'], right: 1, why: '18000 × 2 × 0.05 = 1800 mm/min.' }
+    ],
+    docs: ['overrides', 'spindle'] },
+
+  { id: 'depth-stepover', level: 5, title: 'Depth of cut and stepover', mins: 4, fig: 'stepover',
+    body:
+      '<p>The bit can’t go full depth in one pass. A program steps down:</p>' +
+      '<ul><li><strong>Depth per pass</strong> (stepdown): how much deeper each pass goes. A common start in wood is half the bit’s diameter; less in hard materials and with small bits.</li>' +
+      '<li><strong>Stepover</strong>: how far the bit moves over between rows when clearing a pocket, as a share of its diameter. 40–50 % roughs it out; 10–20 % leaves a smooth floor.</li>' +
+      '<li><strong>Roughing then finishing:</strong> take most of the material fast, then a light last pass for a clean wall and an exact size.</li></ul>' +
+      '<p>A slot (the bit cutting with both sides, like the first pass of a profile) is the hardest work for a bit: go a little shallower there.</p>',
+    quiz: [
+      { q: 'A 6 mm bit in hardwood. A sensible first depth per pass?', a: ['12 mm', 'About 2–3 mm', '0.1 mm'], right: 1, why: 'Around half the diameter or a bit less in hardwood. 0.1 mm rubs; 12 mm overloads it.' }
+    ],
+    docs: [] },
+
+  { id: 'climb-conventional', level: 5, title: 'Climb vs conventional', mins: 4, fig: 'climb',
+    body:
+      '<p>When a bit cuts along a wall, it turns either with the travel or against it:</p>' +
+      '<ul><li><strong>Conventional</strong>: the edge meets the material against the direction of travel. More forgiving on a less stiff machine; it can leave a rougher edge in some woods.</li>' +
+      '<li><strong>Climb</strong>: the edge bites in with the travel, taking a thick chip first. Usually a cleaner edge, but it pulls the bit into the work, so a flexible machine can be dragged off line.</li></ul>' +
+      '<p>With the spindle turning clockwise (M3), seen from above: going around the <strong>outside</strong> of a part <strong>clockwise</strong> is conventional, counterclockwise is climb. Inside a pocket it’s the reverse. Your CAM or plugin has a setting for it. A common habit: rough conventional, finish with a light climb pass.</p>',
+    quiz: [
+      { q: 'Spindle clockwise, cutting around the outside of a part counterclockwise. That’s…', a: ['Climb', 'Conventional'], right: 0, why: 'Outside: clockwise is conventional, counterclockwise is climb.' }
+    ],
+    docs: [] },
+
+  { id: 'workholding', level: 5, title: 'Holding the work', mins: 4, fig: 'clamps',
+    body:
+      '<p>The bit pushes the work sideways with real force. If it moves even a little, the part is ruined; if it comes loose, it’s thrown.</p>' +
+      '<ul><li><strong>Clamps</strong> on the edges: low ones, placed where the program won’t go. Check in the visualizer.</li>' +
+      '<li><strong>Screws</strong> into the spoilboard, outside the cut (use brass or plastic if the bit could reach them).</li>' +
+      '<li><strong>Painter’s tape and super glue</strong>: tape on the stock and the spoilboard, glue between. Great for thin sheets.</li>' +
+      '<li><strong>Dog holes and pins</strong> in the spoilboard to push the stock square against.</li>' +
+      '<li><strong>Tabs</strong>: small bridges the program leaves so a cut-out part stays attached until the end. Without tabs, the last pass can catch a free part and throw it.</li></ul>' +
+      '<p>Before every job: is everything tight, and is every clamp and screw clear of the path, including the rapids?</p>',
+    quiz: [
+      { q: 'You’re cutting a small part all the way out of the sheet. What keeps it from flying at the end?', a: ['A faster feed', 'Tabs, or tape and glue', 'Nothing is needed'], right: 1, why: 'Once the last pass cuts through, the part is free. Tabs or tape and glue hold it.' }
+    ],
+    docs: ['keepout'] },
+
+  // ---------- Your first part ----------
+  { id: 'first-part', level: 6, title: 'Your first part', mins: 30, fig: null,
+    body:
+      '<p>Everything together: a shallow pocket in a piece of scrap, made with the <strong>QuickCut</strong> plugin (install it from ncSender’s Plugins if you don’t have it). Go step by step; each links back to its lesson.</p>',
+    steps: [
+      { text: 'Safety glasses on, hearing protection, dust collection ready, E-stop in reach.', lesson: 'safety' },
+      { text: 'Home the machine.', lesson: 'homing' },
+      { text: 'Hold a piece of scrap down: clamps or tape and glue, clear of the middle.', lesson: 'workholding' },
+      { text: 'Put in a flat end bit, 3–6 mm.', lesson: 'bits' },
+      { text: 'Zero X and Y on the scrap’s front-left corner.', lesson: 'zero-xy' },
+      { text: 'Zero Z on the scrap’s top.', lesson: 'zero-z' },
+      { text: 'In QuickCut, make a rectangle pocket 40 × 30 mm, 2 mm deep, from the front-left corner, with your bit. Use its starting feeds.', lesson: 'feeds-speeds' },
+      { text: 'Check it in the visualizer: origin, size, depth, clear of the clamps.', lesson: 'check' },
+      { text: 'Air cut it with Z0 raised 25 mm, then put Z0 back on the stock.', lesson: 'air-cut' },
+      { text: 'Run it. Stay by the machine, listen, and watch the chips.', lesson: 'pause-stop' },
+      { text: 'When the spindle has stopped, vacuum up and measure the pocket.', lesson: null }
+    ],
+    docs: ['quickcut', 'faq-new'] }
+];
+
+var CT_GLOSSARY = [
+  ['Air cut', 'Running a program with Z0 raised, so it cuts nothing.', 'air-cut'],
+  ['Alarm', 'The controller stopped because something went wrong; it won’t move until cleared.', 'limits'],
+  ['Chip load', 'How thick a chip each cutting edge takes: feed ÷ (RPM × flutes).', 'feeds-speeds'],
+  ['Climb milling', 'Cutting with the bit’s edge moving with the travel.', 'climb-conventional'],
+  ['Conventional milling', 'Cutting with the bit’s edge moving against the travel.', 'climb-conventional'],
+  ['DRO', 'Digital readout: the position numbers in ncSender.', 'work-coordinates'],
+  ['E-stop', 'The emergency stop button: cuts power to motors and spindle.', 'safety'],
+  ['Feed hold', 'A pause that stops on the path and keeps the program’s place.', 'pause-stop'],
+  ['Feed rate', 'How fast the bit moves through the work (F).', 'feeds-speeds'],
+  ['Flute', 'One cutting edge of a bit.', 'bits'],
+  ['G-code', 'The text commands a program is made of.', 'gcode'],
+  ['G54–G59', 'The six work offsets the controller keeps.', 'work-coordinates'],
+  ['Hard limit', 'A limit switch that stops the machine when pressed.', 'limits'],
+  ['Home', 'The machine’s fixed origin, found by homing to its switches.', 'homing'],
+  ['Jog', 'Moving the machine by hand from ncSender.', 'jogging'],
+  ['Machine coordinates', 'Positions measured from home (MPos).', 'homing'],
+  ['Park', 'A spot you choose to move the spindle out of the way.', 'out-of-the-way'],
+  ['Rapid', 'A fast move that doesn’t cut (G0).', 'gcode'],
+  ['Safe Z', 'A height to lift to before moving across.', 'out-of-the-way'],
+  ['Soft limit', 'A travel limit in the controller’s settings, checked before moving.', 'limits'],
+  ['Spoilboard', 'The sacrificial board on the table you cut into when cutting through.', 'zero-z'],
+  ['Stepdown', 'How much deeper each pass goes.', 'depth-stepover'],
+  ['Stepover', 'How far over each row goes when clearing a pocket.', 'depth-stepover'],
+  ['Tabs', 'Small bridges that hold a cut-out part in place.', 'workholding'],
+  ['Tool length offset', 'The Z shift for a bit’s length, from a tool length setter.', 'tool-length'],
+  ['Work offset', 'Where work zero is, measured from home.', 'work-coordinates'],
+  ['Work zero', 'X0 Y0 Z0 of a program, set on the stock.', 'work-coordinates']
+];
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { CT_DOCS_BASE: CT_DOCS_BASE, CT_DOCS: CT_DOCS, CT_LEVELS: CT_LEVELS, CT_LESSONS: CT_LESSONS, CT_GLOSSARY: CT_GLOSSARY };
+}
+/* END lib/tutor-lessons.cjs */
+
+/* BEGIN lib/tutor-figures.cjs */
+// The lessons' figures as inline SVG, colored by the dialog's CSS (ct-fig
+// classes), so they follow ncSender's light and dark themes.
+// Axis colors as ncSender's visualizer: X red, Y green, Z blue.
+
+function ctSvg(body, w, h, label) {
+  return '<svg class="ct-fig" viewBox="0 0 ' + (w || 320) + ' ' + (h || 200) + '" role="img" aria-label="' + label + '">' +
+    body + '</svg>';
+}
+// A line with a filled head at (x2, y2), in the line's class (cls-head fills it).
+function ctHead(x1, y1, x2, y2, cls) {
+  var a = Math.atan2(y2 - y1, x2 - x1), L = 9, W = 4.5;
+  var bx = x2 - L * Math.cos(a), by = y2 - L * Math.sin(a);
+  var p = [[x2, y2], [bx + W * Math.sin(a), by - W * Math.cos(a)], [bx - W * Math.sin(a), by + W * Math.cos(a)]];
+  return '<polygon class="' + cls + '-head" points="' + p.map(function(q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join(' ') + '"/>';
+}
+function ctArrow(x1, y1, x2, y2, cls) { return '<line class="' + cls + '" x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"/>' + ctHead(x1, y1, x2, y2, cls); }
+function ctText(x, y, t, cls, anchor) { return '<text class="' + (cls || 'f-txt') + '" x="' + x + '" y="' + y + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + t + '</text>'; }
+
+var CT_FIGS = {
+  estop: function() {
+    return ctSvg(
+      '<rect class="f-box" x="110" y="95" width="100" height="80" rx="8"/>' +
+      '<rect class="f-warn-fill" x="130" y="110" width="60" height="50" rx="4"/>' +
+      '<ellipse class="f-red-fill" cx="160" cy="88" rx="44" ry="14"/>' +
+      '<path class="f-red-fill" d="M116 88v-22a44 14 0 0 1 88 0v22a44 14 0 0 1-88 0z"/>' +
+      '<ellipse class="f-red-top" cx="160" cy="66" rx="44" ry="14"/>' +
+      ctText(160, 196, 'Press to stop. Twist to release.', 'f-txt', 'middle'), 320, 205, 'An emergency stop button');
+  },
+  axes: function() {
+    return ctSvg(
+      '<path class="f-box" d="M60 150 L200 150 L260 100 L120 100 Z"/>' +
+      '<rect class="f-line" x="140" y="35" width="26" height="58" rx="4"/>' +
+      '<line class="f-line" x1="153" y1="93" x2="153" y2="112"/>' +
+      ctArrow(153, 125, 225, 125, 'f-x') + ctText(232, 129, 'X+ right', 'f-x-txt') +
+      ctArrow(153, 125, 193, 92, 'f-y') + ctText(200, 88, 'Y+ back', 'f-y-txt') +
+      ctArrow(115, 90, 115, 30, 'f-z') + ctText(70, 24, 'Z+ up', 'f-z-txt') +
+      '<circle class="f-dot" cx="153" cy="125" r="3"/>' +
+      ctText(130, 180, 'You stand here', 'f-txt', 'middle') + ctArrow(130, 186, 130, 194, 'f-line'), 320, 200, 'X goes right, Y goes back, Z goes up');
+  },
+  home: function(f) {
+    var c = (f && f.homeCorner) || 'back-left', back = c.indexOf('back') === 0, left = /left$/.test(c);
+    var hx = left ? 62 : 258, hy = back ? 42 : 158;
+    return ctSvg(
+      '<rect class="f-box" x="50" y="30" width="220" height="140" rx="6"/>' +
+      ctText(160, 24, 'back', 'f-txt', 'middle') + ctText(160, 188, 'front (you)', 'f-txt', 'middle') +
+      '<circle class="f-acc-fill" cx="' + hx + '" cy="' + hy + '" r="8"/>' +
+      ctText(hx + (left ? 14 : -14), hy + 4, 'home', 'f-acc-txt', left ? 'start' : 'end') +
+      '<circle class="f-line" cx="160" cy="100" r="8"/>' + ctArrow(160, 100, hx + (left ? 14 : -14), hy + (back ? 10 : -10), 'f-acc') +
+      ctText(160, 128, 'homing finds the switches', 'f-txt', 'middle'), 320, 195, 'Homing moves to the home corner');
+  },
+  jog: function() {
+    var b = '';
+    [['10', 40], ['1', 120], ['0.1', 200]].forEach(function(s, i) {
+      b += '<rect class="f-box" x="' + s[1] + '" y="40" width="70" height="40" rx="8"/>' + ctText(s[1] + 35, 66, s[0] + ' mm', 'f-txt', 'middle');
+    });
+    b += '<line class="f-line" x1="40" y1="140" x2="280" y2="140"/>';
+    b += ctArrow(40, 120, 280, 120, 'f-x') + ctText(160, 112, '10 mm: travel', 'f-txt', 'middle');
+    b += ctArrow(40, 155, 64, 155, 'f-y') + ctText(70, 159, '1 mm: getting close', 'f-txt');
+    b += ctArrow(40, 175, 43, 175, 'f-z') + ctText(50, 179, '0.1 mm: touching', 'f-txt');
+    return ctSvg(b, 320, 190, 'Step sizes');
+  },
+  safez: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="40" y="130" width="240" height="30"/>' + '<rect class="f-clamp" x="150" y="112" width="30" height="18"/>' +
+      ctText(165, 108, 'clamp', 'f-txt', 'middle') +
+      '<path class="f-bad" d="M60 125 L270 125"/>' + ctText(280, 122, '✕', 'f-bad-txt') +
+      '<path class="f-acc" d="M60 125 L60 60 L260 60 L260 118"/>' + ctHead(260, 100, 260, 125, 'f-acc') +
+      ctText(160, 52, 'lift to Safe Z, move, then lower', 'f-acc-txt', 'middle'), 320, 175, 'Lift first, then move across');
+  },
+  wcs: function() {
+    return ctSvg(
+      '<rect class="f-box" x="20" y="20" width="280" height="150" rx="6"/>' +
+      '<rect class="f-stock" x="170" y="45" width="110" height="75"/>' +
+      ctArrow(40, 155, 166, 122, 'f-acc') + ctText(48, 128, 'work offset (G54)', 'f-acc-txt') +
+      '<circle class="f-acc-fill" cx="40" cy="155" r="6"/>' + ctText(30, 190, 'home (machine 0)', 'f-txt') +
+      '<circle class="f-dot" cx="170" cy="120" r="6"/>' + ctText(176, 140, 'work zero X0 Y0', 'f-txt'), 320, 200, 'The work offset is the distance from home to work zero');
+  },
+  xyzero: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="30" y="40" width="120" height="100"/>' + '<circle class="f-dot" cx="30" cy="140" r="6"/>' +
+      ctText(90, 165, 'corner', 'f-txt', 'middle') + ctArrow(30, 140, 70, 140, 'f-x') + ctArrow(30, 140, 30, 100, 'f-y') +
+      '<rect class="f-stock" x="180" y="40" width="120" height="100"/>' + '<circle class="f-dot" cx="240" cy="90" r="6"/>' +
+      '<line class="f-dash" x1="180" y1="40" x2="300" y2="140"/><line class="f-dash" x1="300" y1="40" x2="180" y2="140"/>' +
+      ctText(240, 165, 'center', 'f-txt', 'middle'), 320, 180, 'X0 Y0 on a corner or in the center');
+  },
+  zzero: function() {
+    return ctSvg(
+      '<rect class="f-spoil" x="20" y="150" width="280" height="22"/>' + ctText(160, 166, 'spoilboard', 'f-txt', 'middle') +
+      '<rect class="f-stock" x="40" y="105" width="240" height="45"/>' +
+      '<rect class="f-line" x="70" y="30" width="20" height="50" rx="3"/><path class="f-bit" d="M75 80 h10 v22 l-5 3 l-5 -3 z"/>' +
+      '<line class="f-paper" x1="55" y1="104" x2="110" y2="104"/>' + ctText(118, 100, 'paper: lower until it drags', 'f-txt') +
+      ctText(296, 102, 'Z0 = top', 'f-acc-txt', 'end') + '<line class="f-acc" x1="40" y1="105" x2="300" y2="105"/>', 320, 180, 'Zero Z on the stock top');
+  },
+  tlo: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="20" y="140" width="280" height="30"/>' + '<line class="f-acc" x1="20" y1="140" x2="300" y2="140"/>' + ctText(296, 134, 'Z0', 'f-acc-txt', 'end') +
+      '<rect class="f-line" x="70" y="20" width="24" height="50" rx="3"/><path class="f-bit" d="M76 70 h12 v68 l-6 2 l-6 -2 z"/>' + ctText(82, 160, 'zeroed bit', 'f-txt', 'middle') +
+      '<rect class="f-line" x="190" y="20" width="24" height="50" rx="3"/><path class="f-bit" d="M196 70 h12 v88 l-6 2 l-6 -2 z"/>' +
+      '<line class="f-bad" x1="180" y1="140" x2="224" y2="160"/>' + ctText(230, 120, 'longer bit:', 'f-bad-txt') + ctText(230, 134, 'cuts deeper', 'f-bad-txt'), 320, 180, 'A longer bit cuts deeper with the same Z0');
+  },
+  aircut: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="30" y="140" width="260" height="30"/>' + '<line class="f-dash" x1="30" y1="140" x2="290" y2="140"/>' + ctText(286, 134, 'real Z0', 'f-txt', 'end') +
+      '<line class="f-acc" x1="30" y1="80" x2="290" y2="80"/>' + ctText(286, 74, 'air cut Z0: +25 mm', 'f-acc-txt', 'end') +
+      ctArrow(60, 138, 60, 84, 'f-z') +
+      '<path class="f-path" d="M90 70 L90 95 L250 95 L250 70"/>' + ctText(170, 112, 'the program cuts in the air', 'f-txt', 'middle'), 320, 180, 'Raise Z0 to run the program above the stock');
+  },
+  bits: function() {
+    function shank(x) { return '<rect class="f-line" x="' + (x - 8) + '" y="20" width="16" height="50"/>'; }
+    return ctSvg(
+      shank(50) + '<path class="f-bit" d="M42 70 h16 v70 h-16 z"/>' + ctText(50, 160, 'flat', 'f-txt', 'middle') +
+      shank(130) + '<path class="f-bit" d="M122 70 h16 v62 a8 8 0 0 1 -16 0 z"/>' + ctText(130, 160, 'ball', 'f-txt', 'middle') +
+      shank(210) + '<path class="f-bit" d="M202 70 h16 v20 l-8 50 l-8 -50 z"/>' + ctText(210, 160, 'V', 'f-txt', 'middle') +
+      shank(280) + '<path class="f-bit" d="M272 70 h16 v70 h-16 z"/><path class="f-line" d="M272 80 l16 10 M272 95 l16 10 M272 110 l16 10 M272 125 l16 10"/>' + ctText(280, 160, 'spiral', 'f-txt', 'middle'), 320, 175, 'Flat, ball, V and spiral bits');
+  },
+  chip: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="20" y="110" width="280" height="50"/>' +
+      '<circle class="f-line" cx="110" cy="110" r="40"/>' + ctArrow(160, 70, 220, 70, 'f-acc') + ctText(190, 62, 'feed', 'f-acc-txt', 'middle') +
+      '<path class="f-chip" d="M150 110 q 8 -6 16 -2 l-14 6 z"/>' + ctText(170, 100, 'chip load', 'f-txt') +
+      '<path class="f-acc" d="M80 82 a 40 40 0 0 1 60 0"/>' + ctHead(132, 74, 140, 82, 'f-acc') + ctText(110, 58, 'RPM', 'f-acc-txt', 'middle'), 320, 175, 'Chip load is the chip each edge takes');
+  },
+  stepover: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="20" y="40" width="130" height="100"/>' +
+      '<path class="f-cutfill" d="M20 40 h130 v25 h-130 z"/><path class="f-cutfill2" d="M20 65 h130 v25 h-130 z"/>' + ctText(85, 160, 'depth per pass', 'f-txt', 'middle') +
+      '<rect class="f-stock" x="170" y="40" width="130" height="100"/>' +
+      '<circle class="f-line" cx="200" cy="90" r="22"/><circle class="f-line" cx="230" cy="90" r="22"/>' + ctArrow(200, 125, 230, 125, 'f-acc') + ctText(235, 160, 'stepover', 'f-txt', 'middle'), 320, 175, 'Depth per pass and stepover');
+  },
+  climb: function() {
+    return ctSvg(
+      '<rect class="f-stock" x="90" y="60" width="140" height="80"/>' + ctText(160, 104, 'part', 'f-txt', 'middle') +
+      '<rect class="f-acc" x="70" y="40" width="180" height="120" rx="4" fill="none"/>' +
+      ctArrow(110, 40, 190, 40, 'f-acc') + ctArrow(250, 80, 250, 130, 'f-acc') +
+      ctText(160, 30, 'outside, clockwise = conventional', 'f-acc-txt', 'middle') +
+      ctText(160, 182, 'outside, counterclockwise = climb', 'f-txt', 'middle') + ctText(160, 196, '(spindle clockwise, M3, seen from above)', 'f-txt', 'middle'), 320, 205, 'Climb and conventional around a part');
+  },
+  clamps: function() {
+    return ctSvg(
+      '<rect class="f-spoil" x="10" y="20" width="300" height="160"/>' + '<rect class="f-stock" x="60" y="50" width="200" height="100"/>' +
+      '<rect class="f-clamp" x="40" y="80" width="30" height="40"/><rect class="f-clamp" x="250" y="80" width="30" height="40"/>' +
+      '<rect class="f-path" x="100" y="70" width="120" height="60" rx="4"/>' +
+      '<rect class="f-tab" x="155" y="66" width="10" height="8"/><rect class="f-tab" x="155" y="126" width="10" height="8"/>' +
+      ctText(160, 104, 'cut, with tabs', 'f-txt', 'middle') + ctText(55, 72, 'clamp', 'f-txt', 'middle'), 320, 195, 'Clamps clear of the path, tabs on the part');
+  }
+};
+
+function figure(name, facts) { return CT_FIGS[name] ? CT_FIGS[name](facts || {}) : ''; }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { figure: figure, CT_FIGS: CT_FIGS };
+}
+/* END lib/tutor-figures.cjs */
+
+/* BEGIN lib/starting-feeds.cjs */
+// Copied from QuickCut (GPL-3.0, siganberg/ncsender-plugin-quickcut) lib/starting-feeds.cjs; keep in step with it.
+/**
+ * QuickCut starting speeds and feeds.
+ *
+ * MUST STAY IN SYNC WITH the inline startingFeeds inside config.html
+ * (the dialog can't load external JS, so this is the Node-loadable twin
+ * that tests/starting-feeds.test.cjs checks that copy against).
+ */
+function startingFeeds(bitMm, flutes, material, limits) {
+  // By material, as ncCAM's (src/core/tools.js) and Spoilboard Toolbox's:
+  // the chip each tooth takes grows with the bit up to a cap; feed = RPM x
+  // flutes x chip; plunge 30% of the feed; depth per pass and stepover a
+  // share of the bit. HDPE takes a thick chip (a thin one melts it),
+  // polycarbonate one between it and acrylic's, aluminum a small one.
+  // limits: the machine's max feed ($110/$111) and spindle range ($30/$31), when known.
+  var MATERIALS = {
+    mdf: { rpm: 18000, chip: 0.012, maxChip: 0.25, stepdown: 0.5, stepover: 0.45 },
+    softwood: { rpm: 18000, chip: 0.012, maxChip: 0.25, stepdown: 0.5, stepover: 0.45 },
+    hardwood: { rpm: 18000, chip: 0.009, maxChip: 0.2, stepdown: 0.35, stepover: 0.4 },
+    hdpe: { rpm: 15000, chip: 0.02, maxChip: 0.25, stepdown: 0.3, stepover: 0.4 },
+    acrylic: { rpm: 16000, chip: 0.015, maxChip: 0.2, stepdown: 0.3, stepover: 0.4 },
+    polycarbonate: { rpm: 16000, chip: 0.018, maxChip: 0.22, stepdown: 0.3, stepover: 0.4 },
+    aluminum: { rpm: 18000, chip: 0.0045, maxChip: 0.06, stepdown: 0.1, stepover: 0.25 },
+    foam: { rpm: 12000, chip: 0.02, maxChip: 0.4, stepdown: 1, stepover: 0.6 }
+  };
+  var m = MATERIALS[material] || MATERIALS.mdf, L = limits || {};
+  var rpm = Math.round(Math.min(L.maxRpm || 24000, Math.max(L.minRpm || 0, m.rpm)));
+  var chip = Math.min(m.maxChip, m.chip * bitMm), maxFeed = Math.min(L.maxFeed || 4000, 4000);
+  var raw = rpm * (flutes || 2) * chip, feed = Math.round(Math.min(maxFeed, Math.max(150, raw)));
+  return { rpm: rpm, chipMm: chip, feedMm: feed, capped: raw > maxFeed,
+           plungeMm: Math.round(Math.max(60, feed * 0.3)), stepMm: Math.max(0.05, bitMm * m.stepdown), stepoverPct: Math.round(m.stepover * 100) };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { startingFeeds: startingFeeds };
+}
+/* END lib/starting-feeds.cjs */
+
+  // ---------- settings ----------
+  var cfg = Object.assign({ done: {}, ticks: {}, quiz: {}, answers: {}, page: 'home', corner: 'bl', feeds: {} },
+    initialConfig && typeof initialConfig === 'object' ? initialConfig : {});
+  ['done', 'ticks', 'quiz', 'answers', 'feeds'].forEach(function(k) { if (!cfg[k] || typeof cfg[k] !== 'object') cfg[k] = {}; });
+  var saveTimer = null;
+  function save() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function() {
+      fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
+    }, 400);
+  }
+
+  // ---------- what ncSender tells us (read only) ----------
+  var st = { state: {}, fw: null, ncs: {}, facts: machineFacts(null, {}, {}), tracker: null, tryLesson: null, page: null };
+  async function getJson(path) { var r = await fetch(BASE_URL + path); return r.ok ? r.json() : {}; }
+  async function readAll() {
+    var r = await Promise.all([getJson('/api/firmware').catch(function() { return {}; }), getJson('/api/settings').catch(function() { return {}; }), getJson('/api/server-state').catch(function() { return {}; })]);
+    st.fw = r[0]; st.ncs = r[1] || {};
+    if (r[2] && r[2].machineState) st.state = r[2];
+    st.facts = machineFacts(st.fw, st.ncs, st.state.machineState);
+  }
+  function ms() { return st.state.machineState || {}; }
+  function onMessage(ev) {
+    if (!rootAlive()) { window.removeEventListener('message', onMessage); return; }
+    if (!ev.data || ev.data.type !== 'server-state-update' || !ev.data.state) return;
+    st.state = ev.data.state;
+    if (st.tracker) trackState(st.tracker, st.state);
+    scheduleLive();
+  }
+  window.addEventListener('message', onMessage);
+  var liveTimer = null;
+  function scheduleLive() {
+    if (liveTimer) return;
+    liveTimer = setTimeout(function() { liveTimer = null; if (rootAlive()) renderLive(); }, 150);
+  }
+
+  // ---------- little helpers ----------
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function L(mm, dg) { return fmtLen(mm, st.facts.units, dg); }
+  function lessonById(id) { for (var i = 0; i < CT_LESSONS.length; i++) if (CT_LESSONS[i].id === id) return CT_LESSONS[i]; return null; }
+  function lessonIndex(id) { for (var i = 0; i < CT_LESSONS.length; i++) if (CT_LESSONS[i].id === id) return i; return -1; }
+  function xrefs(html) {
+    return html.replace(/\[\[([a-z-]+)\]\]/g, function(all, id) {
+      var l = lessonById(id);
+      return l ? '<button type="button" class="ct-xref" data-go="' + id + '">' + esc(l.title) + '</button>' : id;
+    });
+  }
+  function docLink(key) {
+    var d = CT_DOCS[key];
+    if (!d) return '';
+    var url = CT_DOCS_BASE + d.path;
+    return '<li><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(d.label) + '</a><span class="ct-url">' + esc(url.replace('https://', '')) + '</span></li>';
+  }
+  function yesNo(v, yes, no, unknown) { return v == null ? (unknown || 'not known') : v ? yes : no; }
+  function cornerWords(c) { return c ? c.replace('-', ' ') : 'not set in ncSender'; }
+
+  // ---------- navigation ----------
+  var NAV_EXTRA = [
+    { id: 'machine', title: 'Your machine', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>' },
+    { id: 'where', title: 'Where am I?', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>' },
+    { id: 'glossary', title: 'Glossary', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M8 8h6M8 12h6"/></svg>' }
+  ];
+  function renderNav() {
+    var h = '<button type="button" class="ct-nav-btn" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Start here</button>';
+    CT_LEVELS.forEach(function(lv) {
+      h += '<div class="ct-nav-level">' + (lv.id <= 5 ? 'Level ' + lv.id + ': ' : '') + esc(lv.title) + '</div>';
+      CT_LESSONS.filter(function(l) { return l.level === lv.id; }).forEach(function(l) {
+        h += '<button type="button" class="ct-nav-btn' + (cfg.done[l.id] ? ' done' : '') + '" data-page="' + l.id + '"><span class="ct-mark">' + (cfg.done[l.id] ? '✓' : '') + '</span>' + esc(l.title) + '</button>';
+      });
+    });
+    h += '<div class="ct-nav-level">Reference</div>';
+    NAV_EXTRA.forEach(function(p) { h += '<button type="button" class="ct-nav-btn" data-page="' + p.id + '">' + p.icon + esc(p.title) + '</button>'; });
+    $('ct-nav').innerHTML = h;
+    markNav();
+    var n = CT_LESSONS.filter(function(l) { return cfg.done[l.id]; }).length;
+    $('ct-progress-bar').style.width = Math.round(100 * n / CT_LESSONS.length) + '%';
+    $('ct-progress-text').textContent = n + ' of ' + CT_LESSONS.length + ' lessons done';
+  }
+  function markNav() {
+    ROOT.querySelectorAll('.ct-nav-btn').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-page') === st.page); });
+  }
+  function nextLesson() {
+    for (var i = 0; i < CT_LESSONS.length; i++) if (!cfg.done[CT_LESSONS[i].id]) return CT_LESSONS[i];
+    return null;
+  }
+  function go(page) {
+    if (page !== 'home' && page !== 'machine' && page !== 'where' && page !== 'glossary' && !lessonById(page)) page = 'home';
+    st.page = page;
+    cfg.page = page; save();
+    var p = $('ct-panel');
+    if (page === 'home') p.innerHTML = homePage();
+    else if (page === 'machine') p.innerHTML = machinePage();
+    else if (page === 'where') p.innerHTML = wherePage();
+    else if (page === 'glossary') p.innerHTML = glossaryPage();
+    else p.innerHTML = lessonPage(lessonById(page));
+    p.scrollTop = 0;
+    markNav();
+    renderLive();
+  }
+
+  // ---------- pages ----------
+  function homePage() {
+    var next = nextLesson(), h = '<div class="ct-page">';
+    h += '<span class="ct-crumb">CNC Tutor</span><h2 class="ct-h1">Learn your CNC, one step at a time</h2>';
+    h += '<div class="ct-body"><p>Short lessons, from what X, Y and Z are to feeds and speeds, on <strong>your own machine</strong>. Each one explains an idea in plain words, then asks you to try it in ncSender: jog, home, zero. The tutor watches the machine and tells you what it saw.</p>' +
+      '<p><strong>The tutor never moves the machine or sends it anything.</strong> You do every move yourself, in ncSender. During a “Try it” the tutor shrinks to a small card so you can use ncSender behind it.</p></div>';
+    h += '<div class="ct-actions"><button type="button" class="ct-btn" data-go="' + (next ? next.id : 'first-part') + '">' + (next ? (CT_LESSONS.some(function(l) { return cfg.done[l.id]; }) ? 'Continue: ' : 'Start: ') + esc(next.title) : 'All done! Review Your first part') + '</button>' +
+      '<button type="button" class="ct-btn ct-ghost" data-go="machine">Your machine at a glance</button></div>';
+    h += '<div class="ct-levels">';
+    CT_LEVELS.forEach(function(lv) {
+      var ls = CT_LESSONS.filter(function(l) { return l.level === lv.id; }), n = ls.filter(function(l) { return cfg.done[l.id]; }).length;
+      h += '<button type="button" class="ct-level-card" data-go="' + ls[0].id + '"><span class="ct-crumb">' + (lv.id <= 5 ? 'Level ' + lv.id : 'Capstone') + ' · ' + n + ' of ' + ls.length + ' done</span><strong>' + esc(lv.title) + '</strong><span class="ct-sub">' +
+        (lv.id <= 5 ? ls.map(function(l) { return esc(l.title); }).join(' · ') : 'From a piece of scrap to a finished pocket, step by step') + '</span></button>';
+    });
+    h += '</div>';
+    h += '<div class="ct-card"><h3 class="ct-h2">If something looks wrong</h3><p>Hit the E-stop first and think after. Nothing in these lessons needs speed. If ncSender shows an alarm, the <button type="button" class="ct-xref" data-go="limits">Limits and alarms</button> lesson explains what to do.</p>' +
+      '<div class="ct-actions"><button type="button" class="ct-btn ct-ghost" id="ct-reset-progress">Start the lessons over</button><span class="ct-note" id="ct-reset-note"></span></div></div>';
+    return h + '</div>';
+  }
+
+  function lessonPage(l) {
+    var i = lessonIndex(l.id), lv = CT_LEVELS.filter(function(v) { return v.id === l.level; })[0];
+    var h = '<div class="ct-page" data-lesson="' + l.id + '">';
+    h += '<span class="ct-crumb">' + (l.level <= 5 ? 'Level ' + l.level + ': ' : '') + esc(lv.title) + ' · lesson ' + (i + 1) + ' of ' + CT_LESSONS.length + ' · about ' + l.mins + ' min</span>';
+    h += '<h2 class="ct-h1">' + esc(l.title) + '</h2>';
+    h += '<div class="ct-lesson"><div class="ct-col">';
+    h += '<div class="ct-body">' + xrefs(l.body) + '</div>';
+    if (l.live) h += '<div class="ct-card" data-live="' + l.live + '"></div>';
+    if (l.steps) h += stepsCard(l);
+    if (l.tryIt) h += tryCard(l);
+    if (l.ticks) h += ticksCard(l);
+    if (l.quiz) h += quizCard(l);
+    h += '<div class="ct-actions ct-end">' + (i > 0 ? '<button type="button" class="ct-btn ct-ghost" data-go="' + CT_LESSONS[i - 1].id + '">← ' + esc(CT_LESSONS[i - 1].title) + '</button>' : '<span></span>') +
+      '<button type="button" class="ct-btn" data-done="' + l.id + '">' + (i < CT_LESSONS.length - 1 ? (cfg.done[l.id] ? 'Next: ' : 'Done, next: ') + esc(CT_LESSONS[i + 1].title) + ' →' : (cfg.done[l.id] ? 'Back to the start' : 'Done!')) + '</button></div>';
+    h += '</div><div class="ct-col">';
+    if (l.fig) h += '<div class="ct-figbox">' + figure(l.fig, st.facts) + '</div>';
+    if (l.docs && l.docs.length) h += '<div class="ct-card"><h3 class="ct-h2">In ncSender’s docs</h3><ul class="ct-links">' + l.docs.map(docLink).join('') + '</ul></div>';
+    h += '</div></div></div>';
+    return h;
+  }
+  function tryCard(l) {
+    var t = l.tryIt, active = st.tryLesson === l.id && st.tracker;
+    var h = '<div class="ct-card ct-try"><div class="ct-card-head"><h3 class="ct-h2">Try it' + (t.optional ? ' (optional)' : '') + '</h3></div>';
+    h += '<p>' + t.text + '</p>';
+    h += '<ul class="ct-checks" data-checks="' + l.id + '"></ul>';
+    h += '<div class="ct-actions">';
+    if (t.button === 'load') h += '<button type="button" class="ct-btn ct-ghost" id="ct-load-sample">Load the practice program</button>';
+    h += '<button type="button" class="ct-btn" data-try="' + l.id + '">' + (active ? 'Keep watching' : 'Start: shrink the tutor and watch') + '</button><span class="ct-note" id="ct-try-note"></span></div>';
+    if (l.askAfter) h += '<div class="ct-q" data-ask="' + l.id + '" hidden><span class="ct-q-text">' + esc(l.askAfter.q) + '</span><div class="ct-actions"><button type="button" class="ct-btn ct-ghost" data-ask-yes>Yes</button><button type="button" class="ct-btn ct-ghost" data-ask-no>No</button></div><p class="ct-why" data-ask-why hidden></p></div>';
+    return h + '</div>';
+  }
+  function ticksCard(l) {
+    var t = cfg.ticks[l.id] || {};
+    return '<div class="ct-card"><h3 class="ct-h2">Check off</h3><div class="ct-ticks">' + l.ticks.map(function(text, k) {
+      return '<label class="ct-tick"><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + '>' + esc(text) + '</label>';
+    }).join('') + '</div></div>';
+  }
+  function stepsCard(l) {
+    var t = cfg.ticks[l.id] || {};
+    return '<div class="ct-card"><h3 class="ct-h2">Step by step</h3><ul class="ct-steps">' + l.steps.map(function(s, k) {
+      return '<li><input type="checkbox" data-tick="' + l.id + ':' + k + '"' + (t[k] ? ' checked' : '') + ' aria-label="Step ' + (k + 1) + ' done"><span>' + (k + 1) + '. ' + esc(s.text) +
+        (s.lesson ? ' <button type="button" class="ct-xref" data-go="' + s.lesson + '">' + esc(lessonById(s.lesson).title) + '</button>' : '') + '</span></li>';
+    }).join('') + '</ul></div>';
+  }
+  function quizCard(l) {
+    var ans = cfg.answers[l.id] || {};
+    return '<div class="ct-card"><h3 class="ct-h2">Check yourself</h3><div class="ct-quiz">' + l.quiz.map(function(q, qi) {
+      var chosen = ans[qi];
+      return '<div class="ct-q"><span class="ct-q-text">' + esc(q.q) + '</span><div class="ct-opts">' + q.a.map(function(a, ai) {
+        var state = chosen == null ? '' : ai === q.right ? 'right' : ai === chosen ? 'wrong' : '';
+        return '<button type="button" class="ct-opt" data-quiz="' + l.id + ':' + qi + ':' + ai + '"' + (state ? ' data-state="' + state + '"' : '') + '>' + esc(a) + '</button>';
+      }).join('') + '</div>' + (chosen != null ? '<p class="ct-why">' + (chosen === q.right ? '<strong>Right.</strong> ' : '<strong>Not quite.</strong> ') + esc(q.why) + '</p>' : '') + '</div>';
+    }).join('') + '</div></div>';
+  }
+
+  function machinePage() {
+    return '<div class="ct-page"><span class="ct-crumb">Reference</span><h2 class="ct-h1">Your machine at a glance</h2>' +
+      '<p class="ct-sub">Read from grblHAL’s settings and ncSender’s, without sending anything to the controller.</p>' +
+      '<div class="ct-card" data-live="facts"></div></div>';
+  }
+  function wherePage() {
+    return '<div class="ct-page"><span class="ct-crumb">Reference</span><h2 class="ct-h1">Where am I?</h2>' +
+      '<p class="ct-sub">The machine’s state right now, in words. It updates as the machine moves.</p>' +
+      '<div class="ct-card" data-live="where"></div><div class="ct-card" data-live="zeromap"></div><div class="ct-card" data-live="offsets"></div></div>';
+  }
+  function glossaryPage() {
+    return '<div class="ct-page"><span class="ct-crumb">Reference</span><h2 class="ct-h1">Glossary</h2><dl class="ct-gloss">' +
+      CT_GLOSSARY.map(function(g) { return '<dt>' + esc(g[0]) + '</dt><dd>' + esc(g[1]) + ' <button type="button" class="ct-xref" data-go="' + g[2] + '">' + esc(lessonById(g[2]).title) + '</button></dd>'; }).join('') + '</dl></div>';
+  }
+
+  // ---------- live blocks ----------
+  function dro() {
+    var m = ms(), mp = ctVec(m.MPos), wp = ctVec(m.WPos);
+    function row(name, v) {
+      return '<span class="ct-dro-h">' + name + '</span>' + ['x', 'y', 'z'].map(function(k) { return '<span class="ct-ax-' + k + '">' + k.toUpperCase() + ' ' + (v ? L(v[k], st.facts.units === 'in' ? 4 : 3) : '–') + '</span>'; }).join('');
+    }
+    return '<div class="ct-dro">' + row('Work (' + esc(String(m.workspace || 'G54')) + ')', wp) + row('Machine', mp) + '</div>';
+  }
+  var LIVE = {
+    axes: function() {
+      var f = st.facts, t = f.travel;
+      return '<h3 class="ct-h2">Your machine</h3><p>X can travel ' + L(t.x, 0) + ', Y ' + L(t.y, 0) + ' and Z ' + L(t.z, 0) + '. ncSender has its home in the ' + esc(cornerWords(f.homeCorner)) + ' corner.</p>' +
+        '<p class="ct-sub">Live position: these numbers change as you jog.</p>' + dro();
+    },
+    homing: function() {
+      var f = st.facts, m = ms();
+      var h = '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Homed now</th><td>' + (m.connected ? (m.homed ? 'Yes' : 'No') : 'Not connected') + '</td></tr>' +
+        '<tr><th>Homing</th><td>' + yesNo(f.homing, 'On ($22)', 'Off ($22): this machine can’t home, so its machine coordinates are only where it powered on') + '</td></tr>' +
+        '<tr><th>Must home after power on</th><td>' + yesNo(f.homingRequired, 'Yes: it starts in an alarm until homed', 'No') + '</td></tr>' +
+        '<tr><th>Home corner (ncSender)</th><td>' + esc(cornerWords(f.homeCorner)) + '</td></tr>' +
+        '<tr><th>Backs off the switch by</th><td>' + (f.pullOff != null ? L(f.pullOff) + ' ($27)' : 'not known') + '</td></tr></table>';
+      return h + dro();
+    },
+    limits: function() {
+      var f = st.facts, t = f.travel, m = ms(), status = String(m.status || '').split(':')[0];
+      var h = '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Soft limits</th><td>' + yesNo(f.softLimits, 'On ($20)', 'Off ($20)') + '</td></tr>' +
+        '<tr><th>Hard limits</th><td>' + yesNo(f.hardLimits, 'On ($21)', 'Off ($21)') + '</td></tr>' +
+        '<tr><th>Travel</th><td>X ' + L(t.x, 0) + ', Y ' + L(t.y, 0) + ', Z ' + L(t.z, 0) + ' ($130–$132)</td></tr>' +
+        '<tr><th>State now</th><td>' + esc(status || 'not connected') + '</td></tr></table>';
+      if (f.softLimits === false) h += '<p class="ct-warnbox">Soft limits are off: a jog or a program can drive an axis into its end. Turning them on (with homing) is ncSender’s Setup Wizard’s job.</p>';
+      if (f.hardLimits === false) h += '<p class="ct-warnbox">Hard limits are off: the switches are used for homing only, so they won’t stop a move. Many machines run this way, and soft limits then do the work.</p>';
+      if (status === 'Alarm') h += '<p class="ct-warnbox">The machine is in alarm now. ncSender’s alarm dialog says which one and what it means.</p>';
+      return h;
+    },
+    safe: function() {
+      var f = st.facts, park = f.park;
+      return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Safe Z (ncSender)</th><td>' + (f.safeZ != null ? 'machine Z ' + L(f.safeZ) + (f.safeZ <= 0 ? ': ' + L(-f.safeZ) + ' below the top of Z’s travel' : '') : 'not set') + '</td></tr>' +
+        '<tr><th>Park (ncSender)</th><td>' + (park ? 'machine X ' + L(park.x) + ', Y ' + L(park.y) + ', Z ' + L(park.z) : 'not set') + '</td></tr></table>' +
+        '<p class="ct-sub">Both are in ncSender’s settings, in machine coordinates, so they stay put whatever your zero is.</p>';
+    },
+    offsets: function() {
+      var m = ms(), h = '<h3 class="ct-h2">Your work offsets, live</h3><table class="ct-facts"><tr><th>Offset</th><td class="ct-sub">X0 Y0 Z0 in machine coordinates</td></tr>';
+      workOffsets(m).forEach(function(w) {
+        h += '<tr' + (w.active ? ' class="ct-active"' : '') + '><th>' + w.name + (w.active ? ' (active)' : '') + '</th><td class="ct-mono">' +
+          (w.offset ? 'X ' + L(w.offset.x) + ', Y ' + L(w.offset.y) + ', Z ' + L(w.offset.z) : '–') + '</td></tr>';
+      });
+      return h + '</table>' + dro();
+    },
+    zeromap: function() { return '<h3 class="ct-h2">Where zero is on the table</h3>' + zeroMap() + dro(); },
+    tool: function() {
+      var m = ms(), f = st.facts;
+      return '<h3 class="ct-h2">Your machine</h3><table class="ct-facts">' +
+        '<tr><th>Tool in the spindle</th><td>' + (m.tool != null && m.tool !== '' ? 'T' + esc(m.tool) : 'not known') + '</td></tr>' +
+        '<tr><th>Its length measured</th><td>' + (m.toolLengthSet ? 'Yes' : 'No') + '</td></tr>' +
+        '<tr><th>Measure after homing</th><td>' + (f.tlsAfterHome ? 'Yes (ncSender’s setting)' : 'No') + '</td></tr></table>';
+    },
+    gcode: function() {
+      if (ROOT.querySelector('.ct-gcode')) return null;
+      return '<h3 class="ct-h2">The practice program</h3><div class="ct-gcode">' + practiceProgram().map(function(line) {
+        var e = explainLine(line), code = esc(line.replace(/\s*\(.*\)\s*$/, '')), cmt = (line.match(/\(.*\)\s*$/) || [''])[0];
+        var words = e.parts.length ? e.parts.join('; ') : 'A comment: the machine ignores it';
+        return '<button type="button" class="ct-gline">' + code + (cmt ? ' <span class="ct-cmt">' + esc(cmt) + '</span>' : '') + '<span class="ct-explain">' + esc(words.charAt(0).toUpperCase() + words.slice(1)) + '.</span></button>';
+      }).join('') + '</div>';
+    },
+    feeds: function() { return ROOT.querySelector('#ct-f-bit') ? null : feedsCalc(); },
+    facts: function() {
+      var f = st.facts, t = f.travel, r = f.maxRate;
+      if (!ms().connected && !f.known) return '<p>ncSender isn’t connected to the controller, so its settings can’t be read yet.</p>';
+      return '<table class="ct-facts">' +
+        '<tr><th>Travel</th><td>X ' + L(t.x, 0) + ', Y ' + L(t.y, 0) + ', Z ' + L(t.z, 0) + '<span class="ct-sub"> · how far each axis can go</span></td></tr>' +
+        '<tr><th>Fastest moves</th><td>X ' + fmtFeed(r.x, f.units) + ', Y ' + fmtFeed(r.y, f.units) + ', Z ' + fmtFeed(r.z, f.units) + '<span class="ct-sub"> · rapids (G0) go this fast</span></td></tr>' +
+        '<tr><th>Home</th><td>' + esc(cornerWords(f.homeCorner)) + ' · homing ' + yesNo(f.homing, 'on', 'off') + (f.homingRequired ? ', required after power on' : '') + '</td></tr>' +
+        '<tr><th>Limits</th><td>soft ' + yesNo(f.softLimits, 'on', 'off') + ', hard ' + yesNo(f.hardLimits, 'on', 'off') + '</td></tr>' +
+        '<tr><th>Spindle</th><td>' + (f.rpm.max != null ? Math.round(f.rpm.min || 0) + '–' + Math.round(f.rpm.max) + ' RPM' : 'not known') + (f.spindleType ? ' · ' + esc(f.spindleType) : '') + '</td></tr>' +
+        '<tr><th>Laser mode</th><td>' + yesNo(f.laserMode, 'on ($32)', 'off') + '</td></tr>' +
+        '<tr><th>Units in ncSender</th><td>' + (f.units === 'in' ? 'inches' : 'millimeters') + '</td></tr>' +
+        '<tr><th>Axes</th><td>' + esc(f.axes) + '</td></tr>' +
+        '<tr><th>Safe Z</th><td>' + (f.safeZ != null ? 'machine Z ' + L(f.safeZ) : 'not set') + '</td></tr>' +
+        '<tr><th>Park</th><td>' + (f.park ? 'machine X ' + L(f.park.x) + ', Y ' + L(f.park.y) + ', Z ' + L(f.park.z) : 'not set') + '</td></tr></table>';
+    },
+    where: function() { return '<ul class="ct-steps">' + whereAmI(st.state, st.facts).map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>'; }
+  };
+  function renderLive() {
+    ROOT.querySelectorAll('[data-live]').forEach(function(el) {
+      var fn = LIVE[el.getAttribute('data-live')];
+      var h = fn ? fn() : null;
+      if (h != null && el.innerHTML !== h) el.innerHTML = h;
+    });
+    renderChecks();
+    updateFeedsOnce();
+  }
+
+  // The table seen from above: the bed, home, the spindle and the active zero.
+  function axisRange(k) {
+    var T = st.facts.travel[k], S = fwSettings(st.fw), setOrigin = S['22'] ? (Number(S['22'].value) & 8) !== 0 : false;
+    var homesNeg = S['23'] ? (Number(S['23'].value) & (k === 'x' ? 1 : k === 'y' ? 2 : 4)) !== 0 : false;
+    if (T == null) return null;
+    return setOrigin && homesNeg ? [0, T] : [-T, 0];
+  }
+  function zeroMap() {
+    var rx = axisRange('x'), ry = axisRange('y'), m = ms();
+    if (!rx || !ry) return '<p class="ct-sub">The machine’s travel isn’t known yet.</p>';
+    var W = 520, H = 340, pad = 30, sx = (W - 2 * pad) / (rx[1] - rx[0]), sy = (H - 2 * pad) / (ry[1] - ry[0]), s = Math.min(sx, sy);
+    var bw = (rx[1] - rx[0]) * s, bh = (ry[1] - ry[0]) * s, ox = (W - bw) / 2, oy = (H - bh) / 2;
+    function X(v) { return ox + (v - rx[0]) * s; }
+    function Y(v) { return oy + bh - (v - ry[0]) * s; }
+    var h = '<svg class="ct-map" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="The table from above"><rect class="bed" x="' + ox + '" y="' + oy + '" width="' + bw + '" height="' + bh + '" rx="4"/>';
+    h += '<text x="' + (W / 2) + '" y="' + (oy - 8) + '" text-anchor="middle">back</text><text x="' + (W / 2) + '" y="' + (oy + bh + 18) + '" text-anchor="middle">front</text>';
+    workOffsets(m).forEach(function(w) {
+      if (!w.offset || w.active) return;
+      var x = X(w.offset.x), y = Y(w.offset.y);
+      if (x < ox - 1 || x > ox + bw + 1 || y < oy - 1 || y > oy + bh + 1) return;
+      h += '<path class="other" d="M' + (x - 5) + ' ' + y + 'h10M' + x + ' ' + (y - 5) + 'v10"/><text x="' + (x + 6) + '" y="' + (y - 4) + '">' + w.name + '</text>';
+    });
+    var z = activeOffset(m);
+    if (z) {
+      var zx = X(z.x), zy = Y(z.y);
+      h += '<path class="zero" d="M' + (zx - 9) + ' ' + zy + 'h18M' + zx + ' ' + (zy - 9) + 'v18"/><text class="zl" x="' + (zx + 10) + '" y="' + (zy + 14) + '">X0 Y0 (' + esc(String(m.workspace || 'G54')) + ')</text>';
+    }
+    var p = ctVec(m.MPos);
+    if (p) h += '<circle class="spindle" cx="' + X(p.x) + '" cy="' + Y(p.y) + '" r="7"/><text x="' + (X(p.x) + (X(p.x) > W / 2 ? 10 : -10)) + '" y="' + (Y(p.y) - 10) + '" text-anchor="' + (X(p.x) > W / 2 ? 'start' : 'end') + '">spindle</text>';
+    return h + '</svg>';
+  }
+
+  // ---------- feeds calculator ----------
+  var MATERIAL_NAMES = { mdf: 'MDF', softwood: 'Softwood', hardwood: 'Hardwood', hdpe: 'HDPE', acrylic: 'Acrylic', polycarbonate: 'Polycarbonate', aluminum: 'Aluminum', foam: 'Foam' };
+  function feedsCalc() {
+    var f = cfg.feeds, inch = st.facts.units === 'in';
+    var bit = f.bit != null ? f.bit : inch ? '0.25' : '6', flutes = f.flutes || '2', mat = f.material || 'mdf';
+    var opts = Object.keys(MATERIAL_NAMES).map(function(k) { return '<option value="' + k + '"' + (k === mat ? ' selected' : '') + '>' + MATERIAL_NAMES[k] + '</option>'; }).join('');
+    return '<h3 class="ct-h2">Chip load calculator</h3><div class="ct-row">' +
+      '<div class="ct-field"><label for="ct-f-bit">Bit diameter (' + (inch ? 'in' : 'mm') + ')</label><input class="ct-input" id="ct-f-bit" inputmode="decimal" value="' + esc(bit) + '"></div>' +
+      '<div class="ct-field"><label for="ct-f-flutes">Flutes</label><input class="ct-input" id="ct-f-flutes" inputmode="numeric" value="' + esc(flutes) + '"></div>' +
+      '<div class="ct-field"><label for="ct-f-mat">Material</label><select class="ct-select" id="ct-f-mat">' + opts + '</select></div>' +
+      '<div class="ct-field"><label for="ct-f-rpm">Spindle speed (RPM)</label><input class="ct-input" id="ct-f-rpm" inputmode="numeric" value="' + esc(f.rpm || '') + '" placeholder="from the table"></div>' +
+      '<div class="ct-field"><label for="ct-f-chip">Chip load (' + (inch ? 'in' : 'mm') + ')</label><input class="ct-input" id="ct-f-chip" inputmode="decimal" value="' + esc(f.chip || '') + '" placeholder="from the table"></div></div>' +
+      '<p class="ct-result" id="ct-f-out"></p><p class="ct-sub" id="ct-f-start"></p>';
+  }
+  function num(id) { var v = Number(String($(id).value).trim()); var ok = String($(id).value).trim() === '' || (isFinite(v) && v > 0); $(id).classList.toggle('ct-bad', !ok); return isFinite(v) && v > 0 ? v : null; }
+  function updateFeeds() {
+    if (!$('ct-f-bit')) return;
+    var inch = st.facts.units === 'in', k = inch ? 25.4 : 1;
+    var bit = num('ct-f-bit'), flutes = num('ct-f-flutes'), mat = $('ct-f-mat').value, rpmIn = num('ct-f-rpm'), chipIn = num('ct-f-chip');
+    cfg.feeds = { bit: $('ct-f-bit').value, flutes: $('ct-f-flutes').value, material: mat, rpm: $('ct-f-rpm').value, chip: $('ct-f-chip').value }; save();
+    if (!bit || !flutes) { $('ct-f-out').textContent = 'Give the bit’s diameter and flutes.'; $('ct-f-start').textContent = ''; return; }
+    var limits = { maxRpm: st.facts.rpm.max || undefined, minRpm: st.facts.rpm.min || undefined, maxFeed: Math.min(st.facts.maxRate.x || 4000, st.facts.maxRate.y || 4000) };
+    var s = startingFeeds(bit * k, Math.round(flutes), mat, limits);
+    var rpm = rpmIn || s.rpm, chipMm = chipIn ? chipIn * k : s.chipMm, feed = rpm * Math.round(flutes) * chipMm;
+    $('ct-f-out').textContent = 'Feed = ' + Math.round(rpm) + ' × ' + Math.round(flutes) + ' × ' + (inch ? (chipMm / 25.4).toFixed(4) + ' in' : chipMm.toFixed(3) + ' mm') + ' = ' + fmtFeed(feed, st.facts.units);
+    $('ct-f-start').textContent = 'Starting point for ' + MATERIAL_NAMES[mat] + ' with this bit: ' + s.rpm + ' RPM, chip ' + (inch ? (s.chipMm / 25.4).toFixed(4) + ' in' : s.chipMm.toFixed(3) + ' mm') +
+      ', feed ' + fmtFeed(s.feedMm, st.facts.units) + (s.capped ? ' (held to your machine’s limit)' : '') + ', plunge ' + fmtFeed(s.plungeMm, st.facts.units) + ', depth per pass ' + L(s.stepMm) + ', stepover ' + s.stepoverPct + ' %.' +
+      (feed > 4000 ? ' Over 4000 mm/min is a lot for most hobby machines: check the bit maker’s numbers.' : '');
+  }
+
+  // ---------- Try it ----------
+  function renderChecks() {
+    var lists = ROOT.querySelectorAll('[data-checks]');
+    var active = st.tracker && st.tryLesson ? lessonById(st.tryLesson) : null;
+    var res = active ? runCheck(active.tryIt.check, st.tracker, st.facts) : null;
+    if (res && res.done && !cfg.done[active.id + ':try']) { cfg.done[active.id + ':try'] = true; save(); }
+    function items(r) {
+      return r.items.map(function(it) { return '<li data-done="' + (it.done ? 1 : 0) + '"><span class="ct-badge">' + (it.done ? '✓' : '·') + '</span><span>' + esc(it.label) + (it.detail ? '<span class="ct-detail">' + esc(it.detail) + '</span>' : '') + '</span></li>'; }).join('');
+    }
+    lists.forEach(function(ul) {
+      var id = ul.getAttribute('data-checks');
+      var h = res && id === st.tryLesson ? items(res) : cfg.done[id + ':try'] ? '<li data-done="1"><span class="ct-badge">✓</span><span>Done before. Start again to try it once more.</span></li>' : '';
+      if (ul.innerHTML !== h) ul.innerHTML = h;
+      var ask = ROOT.querySelector('[data-ask="' + id + '"]');
+      if (ask) ask.hidden = !((res && id === st.tryLesson && res.done) || cfg.done[id + ':try']);
+    });
+    if (active && res) {
+      var h2 = items(res);
+      if ($('ct-mini-checks').innerHTML !== h2) $('ct-mini-checks').innerHTML = h2;
+      $('ct-mini-done').hidden = !res.done;
+      $('ct-mini-hint').hidden = res.done;
+      $('ct-mini-back').textContent = res.done ? 'Back to the lesson ✓' : 'Back to the lesson';
+    }
+  }
+  function startTry(id) {
+    var l = lessonById(id);
+    if (!ms().connected) { var n = $('ct-try-note'); if (n) { n.setAttribute('data-state', 'warn'); n.textContent = 'ncSender isn’t connected to the controller.'; } return; }
+    if (st.tryLesson !== id || !st.tracker) { st.tracker = startTracker(st.state); st.tryLesson = id; }
+    $('ct-mini-title').textContent = 'Try it · ' + l.title;
+    $('ct-mini-text').innerHTML = l.tryIt.text;
+    setMini(true);
+    renderChecks();
+  }
+  function setMini(on) {
+    ROOT.classList.toggle('ct-mini', on);
+    if (!on && st.page) go(st.page);
+  }
+  async function loadSample() {
+    var note = $('ct-try-note');
+    note.removeAttribute('data-state'); note.textContent = 'Loading…';
+    try {
+      var res = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: CT_SAMPLE_NAME, content: practiceProgram().join('\n') + '\n' }) });
+      if (!res.ok) throw new Error('ncSender answered ' + res.status);
+      note.setAttribute('data-state', 'ok'); note.textContent = 'Loaded. Nothing moves until you press Start.';
+    } catch (e) {
+      note.setAttribute('data-state', 'bad'); note.textContent = 'Couldn’t load it: ' + e.message + '.';
+    }
+  }
+
+  // ---------- wiring ----------
+  function onClick(e) {
+    var t = e.target.closest('button, input[type="checkbox"]');
+    if (!t || !ROOT.contains(t)) return;
+    var a;
+    if ((a = t.getAttribute('data-page'))) return go(a);
+    if ((a = t.getAttribute('data-go'))) return go(a);
+    if ((a = t.getAttribute('data-done'))) {
+      var i = lessonIndex(a);
+      cfg.done[a] = true; save(); renderNav();
+      return go(i < CT_LESSONS.length - 1 ? CT_LESSONS[i + 1].id : 'home');
+    }
+    if ((a = t.getAttribute('data-try'))) return startTry(a);
+    if ((a = t.getAttribute('data-quiz'))) {
+      var p = a.split(':'), l = lessonById(p[0]);
+      cfg.answers[p[0]] = cfg.answers[p[0]] || {};
+      cfg.answers[p[0]][p[1]] = Number(p[2]); save();
+      var card = t.closest('.ct-card'); card.outerHTML = quizCard(l);
+      return;
+    }
+    if ((a = t.getAttribute('data-tick'))) {
+      var q = a.split(':');
+      cfg.ticks[q[0]] = cfg.ticks[q[0]] || {};
+      cfg.ticks[q[0]][q[1]] = t.checked; save();
+      return;
+    }
+    if (t.hasAttribute('data-ask-yes') || t.hasAttribute('data-ask-no')) {
+      var box = t.closest('[data-ask]'), why = box.querySelector('[data-ask-why]'), lsn = lessonById(box.getAttribute('data-ask'));
+      why.hidden = false;
+      why.innerHTML = t.hasAttribute('data-ask-yes') ? '<strong>Good:</strong> your axes are set the right way round.' : esc(lsn.askAfter.no);
+      return;
+    }
+    if (t.classList.contains('ct-gline')) { t.classList.toggle('open'); return; }
+    if (t.id === 'ct-load-sample') return loadSample();
+    if (t.id === 'ct-reset-progress') {
+      if (t.getAttribute('data-sure') !== '1') { t.setAttribute('data-sure', '1'); t.textContent = 'Sure? Tap again to clear your progress'; return; }
+      cfg.done = {}; cfg.ticks = {}; cfg.answers = {}; save(); renderNav(); go('home');
+    }
+  }
+  function wire() {
+    ROOT.addEventListener('click', onClick);
+    ROOT.addEventListener('input', function(e) { if (e.target.id && e.target.id.indexOf('ct-f-') === 0) updateFeeds(); });
+    ROOT.addEventListener('change', function(e) { if (e.target.id === 'ct-f-mat') { $('ct-f-rpm').value = ''; $('ct-f-chip').value = ''; updateFeeds(); } });
+    $('ct-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
+    $('ct-mini-back').addEventListener('click', function() { setMini(false); });
+    $('ct-mini-reset').addEventListener('click', function() { st.tracker = startTracker(st.state); renderChecks(); });
+    $('ct-mini-move').addEventListener('click', function() {
+      var order = ['bl', 'tl', 'tr', 'br'], c = order[(order.indexOf(cfg.corner) + 1) % 4];
+      cfg.corner = c; ROOT.setAttribute('data-corner', c); save();
+    });
+    ROOT.setAttribute('data-corner', ['bl', 'tl', 'tr', 'br'].indexOf(cfg.corner) >= 0 ? cfg.corner : 'bl');
+  }
+  var feedsShown = false;
+  function updateFeedsOnce() {
+    var has = !!$('ct-f-bit');
+    if (has && !feedsShown) updateFeeds();
+    feedsShown = has;
+  }
+
+  wire();
+  renderNav();
+  go(cfg.page || 'home');
+  readAll().then(function() { if (rootAlive()) { renderNav(); go(st.page); } });
+})();
+</script>

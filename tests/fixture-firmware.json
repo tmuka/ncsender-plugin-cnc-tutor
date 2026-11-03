@@ -1,0 +1,97 @@
+{
+ "settings": {
+  "13": {
+   "id": 13,
+   "name": "Report in inches",
+   "value": "0"
+  },
+  "20": {
+   "id": 20,
+   "name": "Soft limits enable",
+   "value": "1"
+  },
+  "21": {
+   "id": 21,
+   "name": "Hard limits enable",
+   "format": "Enable,Strict mode,Disable for rotary axes",
+   "value": "0"
+  },
+  "22": {
+   "id": 22,
+   "name": "Homing cycle",
+   "format": "Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input,Allow manual,Override locks,N/A,N/A,Per axis feedrates,Run startup scripts only on homing completed",
+   "value": "623"
+  },
+  "23": {
+   "id": 23,
+   "name": "Homing direction invert",
+   "value": "3"
+  },
+  "27": {
+   "id": 27,
+   "name": "Homing switch pull-off distance",
+   "format": "#####0.000",
+   "value": "2.000"
+  },
+  "30": {
+   "id": 30,
+   "name": "Maximum spindle speed",
+   "format": "#####0.000",
+   "value": "24000.000"
+  },
+  "31": {
+   "id": 31,
+   "name": "Minimum spindle speed",
+   "format": "#####0.000",
+   "value": "1000.000"
+  },
+  "32": {
+   "id": 32,
+   "name": "Mode of operation",
+   "format": "Normal,Laser mode,Lathe mode",
+   "value": "0"
+  },
+  "110": {
+   "id": 110,
+   "name": "X-axis maximum rate",
+   "format": "#####0.000",
+   "value": "15000.000"
+  },
+  "111": {
+   "id": 111,
+   "name": "Y-axis maximum rate",
+   "format": "#####0.000",
+   "value": "15000.000"
+  },
+  "112": {
+   "id": 112,
+   "name": "Z-axis maximum rate",
+   "format": "#####0.000",
+   "value": "10000.000"
+  },
+  "130": {
+   "id": 130,
+   "name": "X-axis maximum travel",
+   "format": "#####0.000",
+   "value": "812.000"
+  },
+  "131": {
+   "id": 131,
+   "name": "Y-axis maximum travel",
+   "format": "#####0.000",
+   "value": "1230.000"
+  },
+  "132": {
+   "id": 132,
+   "name": "Z-axis maximum travel",
+   "format": "#####0.000",
+   "value": "158.000"
+  },
+  "395": {
+   "id": 395,
+   "name": "Default spindle",
+   "format": "PWM,PWM2,Huanyang v1,Huanyang P2A,Durapulse GS20,Yalang YS620,MODVFD,H-100,Nowforever",
+   "value": "2"
+  }
+ }
+}
