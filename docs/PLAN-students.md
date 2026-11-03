@@ -11,7 +11,7 @@ progress; whoever is at the machine picks their name when they start, and hands 
 - **The current student** shows at the top of the sidebar (name and color) with **Switch student**.
 - **Add a student:** a name (a first name or nickname is enough) and a color. **Rename** and **Remove** (asks
   twice; removes their progress) on the student's card.
-- **Hand over:** **I'm done** (in the sidebar) ends the session and returns to Who's learning?, so the next
+- **Hand over:** **Sign out** (in the sidebar) ends the session and returns to Who's learning?, so the next
   person doesn't carry on in someone else's progress. The tutor also asks "Still you, Sam?" when it opens
   after a long gap (default 2 hours), with Yes and Switch.
 - **One at a time:** the current student is the machine's, not the screen's: the Pi's screen and a laptop
@@ -58,7 +58,7 @@ Restore under plugin configuration). Nothing leaves the machine.
 
 - `lib/tutor-students.cjs` (pure, tested): migrate old settings, add/rename/remove, pick the current student,
   "still you?" timing, class progress numbers (done counts per level, first-try score).
-- config.html: the Who's learning? page, the sidebar chip with Switch and I'm done, Class progress, and every
+- config.html: the Who's learning? page, the sidebar chip with Switch student and Sign out, Class progress, and every
   progress read and write going through the current student.
 - The read-only rule is unchanged: still only its own settings are written.
 - Tests: migration from 0.1 settings, two students' progress kept apart, removing one leaves the others,

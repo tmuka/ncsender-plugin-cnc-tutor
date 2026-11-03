@@ -4,7 +4,7 @@
 
 - Level 6, Probing and tool changes: changing a bit and the collet, how a probe works, the touch plate, the tool length setter, tool changes and the ATC, and the 3D probe. Each shows what your machine has set up in ncSender; a lesson for something it doesn’t have is marked optional and says so. Try it watches the probe input, a probe cycle, a TLS measurement and a tool change.
 - Lessons, quizzes, pictures and the practice program follow ncSender’s units: inch machines get inch examples and an inch practice program.
-- Students, for a shared machine, one at a time: Who’s learning? when the tutor opens, each student’s own progress, Switch and I’m done in the sidebar, and “Still you?” after a 2-hour break. Add, rename and remove students; only a name and a color are kept.
+- Students, for a shared machine, one at a time: Who’s learning? when the tutor opens, each student’s own progress, Switch student and Sign out in the sidebar, and “Still you?” after a 2-hour break. Add, rename and remove students; only a name and a color are kept.
 - Guest: try the lessons without saving progress.
 - Class progress: every student’s lessons per level, Try it steps seen, first-try quiz score and last active.
 - Your progress from 0.1 becomes Student 1 (rename it).
