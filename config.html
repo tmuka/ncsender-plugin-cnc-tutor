@@ -1974,6 +1974,15 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function markNav() {
     ROOT.querySelectorAll('.ct-nav-btn').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-page') === st.page); });
+    revealNav();
+    requestAnimationFrame(revealNav);
+  }
+  function revealNav() {
+    var nav = $('ct-nav'), b = nav && nav.querySelector('.ct-nav-btn.active');
+    if (!b) return;
+    var r = b.getBoundingClientRect(), n = nav.getBoundingClientRect();
+    if (!n.height || (r.top >= n.top && r.bottom <= n.bottom)) return;
+    nav.scrollTop += r.top - n.top - (n.height - r.height) / 2;
   }
   function nextLesson() {
     for (var i = 0; i < CT_LESSONS.length; i++) if (!P.done[CT_LESSONS[i].id]) return CT_LESSONS[i];
@@ -2574,7 +2583,7 @@ if (typeof module !== 'undefined' && module.exports) {
   if (view.page === 'lessons') setStudent(view.student); else st.ask = view.ask || null;
   renderNav();
   restoreTry();
-  go(st.sid ? st.tryLesson || local('page:' + st.sid) || 'home' : 'students');
+  go(st.sid ? st.tryLesson || local('page:' + st.sid) || (student() && student().lastLesson) || 'home' : 'students');
   readAll().then(function() {
     if (!rootAlive()) return;
     renderNav();
