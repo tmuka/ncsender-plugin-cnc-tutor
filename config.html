@@ -170,6 +170,7 @@
   .ct-fig .f-tab { fill: #c9a26b; stroke: var(--color-accent); stroke-width: 1.5; }
   .ct-fig .f-chip { fill: #e0b878; stroke: #8a6a3d; stroke-width: .8; }
   .ct-fig .f-curl { fill: none; stroke: #e0b878; stroke-width: 3.5; stroke-linecap: round; } .ct-fig .f-curl-edge { fill: none; stroke: #8a6a3d; stroke-width: 5; stroke-linecap: round; }
+  .ct-fig .f-bore { fill: #1c232b; }
   .ct-fig .f-burst { fill: color-mix(in srgb, #ffcc33 85%, transparent); stroke: var(--ct-danger); stroke-width: 1.5; }
   .ct-fig .f-crack { fill: none; stroke: #8a6a3d; stroke-width: 1; }
   .ct-fig .f-dust { fill: #b89a6e; }
@@ -1063,7 +1064,7 @@ var CT_LESSONS = [
     docs: ['keepout'] },
 
   // ---------- Level 6: probing and tool changes ----------
-  { id: 'collet', level: 6, title: 'Changing a bit: the collet', mins: 5, fig: 'collet',
+  { id: 'collet', level: 6, title: 'Changing a bit: the collet', mins: 5, fig: ['collet', 'stickout'],
     body:
       '<p>The bit is held by a <strong>collet</strong>: a slotted sleeve that squeezes the bit’s shank when the <strong>nut</strong> is tightened. Each collet fits one shank size (1/4", 1/8", 6 mm…). Spindles use ER collets; trim routers have their own.</p>' +
       '<ol><li><strong>Spindle off.</strong> Unplug a router, or switch off the spindle, before your hands go near the bit.</li>' +
@@ -1590,6 +1591,36 @@ var CT_FIGS = {
       ctText(160, 194, 'the bit clears the clamp; the spindle doesn’t', 'f-bad-txt', 'middle') +
       ctText(160, 210, 'keep clamps low and away from the cut', 'f-txt', 'middle'),
       320, 216, 'Seen from the side: the bit cuts beside a clamp that sticks up above the stock, and the spindle crashes into it', 3.3);
+  },
+  stickout: function() {
+    var D = 5, shank = 58, flutes = 36;
+    function bit(cx, top) {
+      var f = top + shank, lines = '';
+      for (var y = f + 4; y < f + flutes - 6; y += 7) lines += '<line class="f-flute" x1="' + (cx - 5) + '" y1="' + (y + 5) + '" x2="' + (cx + 5) + '" y2="' + y + '"/>';
+      return '<rect class="f-shank" x="' + (cx - 5) + '" y="' + top + '" width="10" height="' + shank + '"/>' +
+        '<path class="f-bit" d="M' + (cx - 5) + ' ' + f + 'h10v' + (flutes - 4) + 'l-5 4l-5 -4z"/>' + lines;
+    }
+    var cases = [
+      { head: 'too far out', cls: 'f-bad-txt', top: 88, lines: ['barely gripped:', 'bends, chatters'],
+        anim: function(cx) { return '<animateTransform attributeName="transform" type="rotate" values="0 ' + cx + ' 102;2.5 ' + cx + ' 102;0 ' + cx + ' 102;-2.5 ' + cx + ' 102;0 ' + cx + ' 102" dur=".3s" repeatCount="indefinite"/>'; } },
+      { head: 'just right', cls: 'f-acc-txt', top: 50, lines: ['most shank in,', 'flutes clear'], anim: function() { return ''; } },
+      { head: 'too far in', cls: 'f-bad-txt', top: 32, lines: ['flutes inside:', 'weak grip, slips'],
+        anim: function() { return ctMove([[0, 0], [0, 0], [0, 6], [0, 6], [0, 0]], [0, .3, .6, .95, 1], D); },
+        warn: function(cx) { return '<rect class="f-danger" x="' + (cx - 8) + '" y="90" width="16" height="12">' + ctFade([.4, 1, .4], [0, .5, 1], 1) + '</rect>'; } }
+    ];
+    var body = '';
+    cases.forEach(function(c, i) {
+      var cx = 60 + i * 120;
+      body += ctText(cx, 14, c.head, c.cls, 'middle') +
+        '<rect class="f-motor" x="' + (cx - 24) + '" y="22" width="48" height="52" rx="4"/>' +
+        '<rect class="f-nut" x="' + (cx - 20) + '" y="74" width="40" height="30" rx="3"/>' +
+        '<rect class="f-bore" x="' + (cx - 6) + '" y="28" width="12" height="20"/>' +
+        '<rect class="f-collet" x="' + (cx - 11) + '" y="48" width="22" height="54"/>' +
+        '<g>' + c.anim(cx) + bit(cx, c.top) + '</g>' + (c.warn ? c.warn(cx) : '') +
+        ctText(cx, 202, c.lines[0], 'f-txt', 'middle') + ctText(cx, 216, c.lines[1], 'f-txt', 'middle');
+    });
+    body += ctText(140, 66, 'collet', 'f-txt', 'end') + '<line class="f-line" x1="144" y1="62" x2="168" y2="62"/>';
+    return ctSvg(body, 360, 222, 'A bit in the collet: too far out, just right with most of the shank gripped and the flutes clear, and too far in with the flutes inside the collet', 1);
   },
   collet: function() {
     var D = 12;
