@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1: Better pictures
+
+- Feeds and speeds: a new picture of the chip at the same RPM with the feed too slow (dust, heat, burn marks), just right (curled chips) and too fast (thick chunks, chatter). The lesson adds that feeds and speeds go with one bit in one material: work them out again when either changes.
+- Changing a bit: a new picture of how far the bit goes into the collet: too far out, just right, and too far in with the flutes inside the collet.
+- Holding the work: a side view of the spindle crashing into a clamp taller than the stock, and vacuum clamps as a production timesaver.
+- Depth of cut and stepover: a longer bit, so the collet no longer plunges into the stock.
+- Work coordinates: many people happily use G54 for every project, and what power users keep the others for.
+- Climb vs conventional: also called left and right cut (G41 and G42).
+- Tool changes: the magazine list lines up when tool numbers have one and two digits.
+- The sidebar scrolls to the lesson you're on, and the tutor reopens on the student's last lesson on any screen.
+
 ## 0.2.0: Students, probing and tools
 
 - Level 6, Probing and tool changes: changing a bit and the collet, how a probe works, the touch plate, the tool length setter, tool changes and the ATC, and the 3D probe. Each shows what your machine has set up in ncSender; a lesson for something it doesn’t have is marked optional and says so. Try it watches the probe input, a probe cycle, a TLS measurement and a tool change.
