@@ -200,6 +200,7 @@
   .ct-facts { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
   .ct-facts th, .ct-facts td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
   .ct-facts th { color: var(--color-text-secondary); font-weight: 600; width: 38%; }
+  .ct-pre { white-space: pre; margin-right: 6px; }
   .ct-facts td.ct-mono, .ct-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
   .ct-facts tr.ct-active td, .ct-facts tr.ct-active th { background: color-mix(in srgb, var(--color-accent) 12%, transparent); color: var(--color-text-primary); }
   .ct-warnbox { border-left: 3px solid var(--ct-warn); padding: 8px 12px; background: color-mix(in srgb, var(--ct-warn) 10%, transparent); border-radius: 6px; font-size: 0.9rem; line-height: 1.45; }
@@ -2348,8 +2349,11 @@ if (typeof module !== 'undefined' && module.exports) {
         '<tr><th>Magazine slots</th><td>' + (t.count || 0) + '</td></tr>' +
         '<tr><th>Tool numbering</th><td>' + (t.numbering === 'toolId' ? 'Tool ID' : 'Slot') + '</td></tr>' +
         '<tr><th>Tool in the spindle</th><td>' + (m.tool ? 'T' + esc(m.tool) : 'not known') + '</td></tr></table>';
-      if (inSlots.length) h += '<p class="ct-sub">In the magazine:</p><ul class="ct-steps">' + inSlots.slice(0, 12).map(function(x) {
-        return '<li><span class="ct-mono">Slot ' + esc(x.toolNumber) + (x.toolId != null ? ' · T' + esc(x.toolId) : '') + '</span>&nbsp; <span title="' + esc(x.name) + '">' + esc(shortName(x.name)) + '</span></li>';
+      var shown = inSlots.slice(0, 12), wide = function(k) { return Math.max.apply(null, shown.map(function(x) { return x[k] != null ? String(x[k]).length : 0; })); };
+      var slotW = wide('toolNumber'), idW = wide('toolId');
+      function pad(v, w) { v = v != null ? String(v) : ''; return v + new Array(w - v.length + 1).join(' '); }
+      if (shown.length) h += '<p class="ct-sub">In the magazine:</p><ul class="ct-steps">' + shown.map(function(x) {
+        return '<li><span class="ct-mono ct-pre">Slot ' + esc(pad(x.toolNumber, slotW)) + (idW ? (x.toolId != null ? ' · T' : '    ') + esc(pad(x.toolId, idW)) : '') + '</span><span title="' + esc(x.name) + '">' + esc(shortName(x.name)) + '</span></li>';
       }).join('') + '</ul>';
       return h;
     },
