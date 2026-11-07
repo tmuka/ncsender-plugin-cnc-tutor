@@ -170,6 +170,7 @@
   .ct-fig .f-tab { fill: #c9a26b; stroke: var(--color-accent); stroke-width: 1.5; }
   .ct-fig .f-chip { fill: #e0b878; stroke: #8a6a3d; stroke-width: .8; }
   .ct-fig .f-curl { fill: none; stroke: #e0b878; stroke-width: 3.5; stroke-linecap: round; } .ct-fig .f-curl-edge { fill: none; stroke: #8a6a3d; stroke-width: 5; stroke-linecap: round; }
+  .ct-fig .f-burst { fill: color-mix(in srgb, #ffcc33 85%, transparent); stroke: var(--ct-danger); stroke-width: 1.5; }
   .ct-fig .f-crack { fill: none; stroke: #8a6a3d; stroke-width: 1; }
   .ct-fig .f-dust { fill: #b89a6e; }
   .ct-fig .f-heat { fill: color-mix(in srgb, #ff7a1a 45%, transparent); }
@@ -1045,7 +1046,7 @@ var CT_LESSONS = [
     ],
     docs: [] },
 
-  { id: 'workholding', level: 5, title: 'Holding the work', mins: 4, fig: 'clamps',
+  { id: 'workholding', level: 5, title: 'Holding the work', mins: 4, fig: ['clamps', 'clampcrash'],
     body:
       '<p>The bit pushes the work sideways with real force. If it moves even a little, the part is ruined; if it comes loose, it’s thrown.</p>' +
       '<ul><li><strong>Clamps</strong> on the edges: low ones, placed where the program won’t go. Check in the visualizer.</li>' +
@@ -1053,6 +1054,7 @@ var CT_LESSONS = [
       '<li><strong>Painter’s tape and super glue</strong>: tape on the stock and the spoilboard, glue between. Great for thin sheets.</li>' +
       '<li><strong>Dog holes and pins</strong> in the spoilboard to push the stock square against.</li>' +
       '<li><strong>Tabs</strong>: small bridges the program leaves so a cut-out part stays attached until the end. Without tabs, the last pass can catch a free part and throw it.</li></ul>' +
+      '<p>Watch the height too. A clamp that sticks up above the stock can be hit even when the bit misses it: the collet and spindle are wider than the bit, so cutting close to a tall clamp can run them into it. A rapid at a low safe height can hit it too. Keep clamps low and away from the cut, and set the program’s safe height above the tallest clamp.</p>' +
       '<p>Before every job: is everything tight, and is every clamp and screw clear of the path, including the rapids?</p>',
     quiz: [
       { q: 'You’re cutting a small part all the way out of the sheet. What keeps it from flying at the end?', a: ['A faster feed', 'Tabs, or tape and glue', 'Nothing is needed'], right: 1, why: 'Once the last pass cuts through, the part is free. Tabs or tape and glue hold it.' }
@@ -1570,6 +1572,23 @@ var CT_FIGS = {
       '<g><animateMotion path="' + path + '" dur="' + D + 's" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.9;1" calcMode="linear"/>' + ctBitTop(0, 0, 6, .4) + '</g>' +
       ctText(160, 112, 'the part', 'f-stock-txt', 'middle') + ctText(160, 196, 'clamps and screws clear of the path; tabs hold the part', 'f-txt', 'middle'),
       320, 202, 'Clamps clear of the path, tabs on the part', 8.5);
+  },
+  clampcrash: function() {
+    var D = 6, star = [];
+    for (var k = 0; k < 16; k++) { var a = k * Math.PI / 8, r = k % 2 ? 6 : 15; star.push((222 + r * Math.cos(a)).toFixed(1) + ',' + (104 + r * Math.sin(a)).toFixed(1)); }
+    return ctSvg(
+      ctText(20, 22, 'seen from the side', 'f-txt') +
+      '<rect class="f-spoil" x="10" y="160" width="300" height="16"/>' +
+      '<rect class="f-stock" x="40" y="132" width="210" height="28"/>' + ctText(120, 154, 'stock', 'f-stock-txt', 'middle') +
+      '<rect class="f-cleared" x="56" y="132" width="0" height="8">' + ctAnim('width', [0, 0, 157.5, 157.5, 0], [0, .05, .45, .95, 1], D) + '</rect>' +
+      '<rect class="f-clamp" x="224" y="110" width="12" height="22"/><rect class="f-clamp" x="222" y="100" width="64" height="12" rx="2"/><rect class="f-clamp" x="272" y="112" width="14" height="48"/>' +
+      '<rect class="f-screw" x="252" y="84" width="8" height="76"/><rect class="f-nut" x="246" y="90" width="20" height="10" rx="1"/>' + ctText(256, 78, 'clamp', 'f-txt', 'middle') +
+      '<g>' + ctFade([1, 1, 0, 0, 1], [0, .9, .93, .97, 1], D) +
+      ctMove([[0, 0], [0, 0], [150, 0], [145, -3], [150, 1], [148, 0], [148, 0], [0, 0]], [0, .05, .45, .48, .51, .54, .95, 1], D) + ctSpindle(60, 140, 24) + '</g>' +
+      '<g opacity="0">' + ctFade([0, 0, 1, 1, 0, 0], [0, .45, .47, .9, .93, 1], D) + '<polygon class="f-burst" points="' + star.join(' ') + '"/>' + ctText(196, 72, 'CRASH', 'f-bad-txt', 'end') + '</g>' +
+      ctText(160, 194, 'the bit clears the clamp; the spindle doesn’t', 'f-bad-txt', 'middle') +
+      ctText(160, 210, 'keep clamps low and away from the cut', 'f-txt', 'middle'),
+      320, 216, 'Seen from the side: the bit cuts beside a clamp that sticks up above the stock, and the spindle crashes into it', 3.3);
   },
   collet: function() {
     var D = 12;
@@ -2107,7 +2126,7 @@ if (typeof module !== 'undefined' && module.exports) {
     h += '<div class="ct-actions ct-end">' + (i > 0 ? '<button type="button" class="ct-btn ct-ghost" data-go="' + CT_LESSONS[i - 1].id + '">← ' + esc(CT_LESSONS[i - 1].title) + '</button>' : '<span></span>') +
       '<button type="button" class="ct-btn" data-done="' + l.id + '">' + (i < CT_LESSONS.length - 1 ? (P.done[l.id] ? 'Next: ' : 'Done, next: ') + esc(CT_LESSONS[i + 1].title) + ' →' : (P.done[l.id] ? 'Back to the start' : 'Done!')) + '</button></div>';
     h += '</div><div class="ct-col">';
-    if (l.fig) h += '<div class="ct-figbox" role="button" tabindex="0" aria-label="Pause or play the picture">' + figure(l.fig, st.facts) + '<span class="ct-fighint">Tap the picture to pause it</span></div>';
+    [].concat(l.fig || []).forEach(function(f) { h += '<div class="ct-figbox" role="button" tabindex="0" aria-label="Pause or play the picture">' + figure(f, st.facts) + '<span class="ct-fighint">Tap the picture to pause it</span></div>'; });
     if (l.docs && l.docs.length) h += '<div class="ct-card"><h3 class="ct-h2">In ncSender’s docs</h3><ul class="ct-links">' + l.docs.map(docLink).join('') + '</ul></div>';
     h += '</div></div></div>';
     return h;
@@ -2454,8 +2473,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function setMini(on) {
     ROOT.classList.toggle('ct-mini', on);
-    var fig = ROOT.querySelector('.ct-figbox svg[data-still]');
-    if (fig && on && typeof fig.pauseAnimations === 'function') fig.pauseAnimations();
+    if (on) ROOT.querySelectorAll('.ct-figbox svg[data-still]').forEach(function(fig) { if (typeof fig.pauseAnimations === 'function') fig.pauseAnimations(); });
     if (!on && st.page) go(st.page);
   }
   async function loadSample() {

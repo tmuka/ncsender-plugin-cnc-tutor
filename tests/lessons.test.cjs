@@ -14,7 +14,7 @@ test('lessons have unique ids, a level, a title and a body', () => {
     assert.ok(CT_LEVELS.some((v) => v.id === l.level), l.id + ' level');
     assert.ok(l.title && l.body && l.mins > 0, l.id);
     if (l.live) assert.ok(LIVE.includes(l.live), l.id + ' live ' + l.live);
-    if (l.fig) assert.ok(CT_FIGS[l.fig], l.id + ' fig ' + l.fig);
+    [].concat(l.fig || []).forEach((f) => assert.ok(CT_FIGS[f], l.id + ' fig ' + f));
     if (l.tryIt) assert.ok(CHECKS[l.tryIt.check], l.id + ' check ' + l.tryIt.check);
     if (l.needs) assert.ok(NEEDS.includes(l.needs), l.id + ' needs ' + l.needs);
     for (const d of l.docs || []) assert.ok(CT_DOCS[d], l.id + ' doc ' + d);
