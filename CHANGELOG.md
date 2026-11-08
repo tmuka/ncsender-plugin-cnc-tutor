@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2: Your bits
+
+- Feeds and speeds: a table of your bits under the chip load calculator. Each end mill, ball nose and compression bit in ncSender's tool table (or common sizes) in the calculator's material, Conservative, Average and Aggressive side by side: feed, plunge, the depth of each pass and how many passes for a Total Depth, and the chip. Notes say what shapes them, and a bar marks a row to look at, such as a flute count the tool table doesn't give. Use puts a bit in the calculator.
+- The starting feeds follow QuickCut's newest: a pass deeper than the bit is wide takes a slightly thinner chip, and a compression bit in wood cuts in the fewest equal passes its flutes allow.
+
 ## 0.2.1: Better pictures
 
 - Feeds and speeds: a new picture of the chip at the same RPM with the feed too slow (dust, heat, burn marks), just right (curled chips) and too fast (thick chunks, chatter). The lesson adds that feeds and speeds go with one bit in one material: work them out again when either changes.

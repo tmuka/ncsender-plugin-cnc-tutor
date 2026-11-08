@@ -21,7 +21,7 @@ visualizer, which doesn't run until you press Start.
 | 2. Moving | Jogging · Getting out of the way (Safe Z, Go to zero, Park) |
 | 3. Zero | Work coordinates (G54–G59) · Zero X and Y · Zero Z · A new bit needs a new Z (tool length) |
 | 4. Running a program | G-code in five minutes · Check before you cut · The air cut · Pause, stop and resume |
-| 5. Cutting well | Bits · Feeds and speeds (with a chip load calculator) · Depth of cut and stepover · Climb vs conventional · Holding the work |
+| 5. Cutting well | Bits · Feeds and speeds (with a chip load calculator and a table of your bits) · Depth of cut and stepover · Climb vs conventional · Holding the work |
 | 6. Probing and tools | Changing a bit: the collet · How a probe works · The touch plate · The tool length setter · Tool changes and the ATC · The 3D probe |
 | Your first part | A pocket in scrap with QuickCut, step by step, each step linked to its lesson |
 

@@ -1,7 +1,7 @@
 {
   "id": "com.tmuka.cnc-tutor",
   "name": "CNC Tutor",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "minAppVersion": "2.0.88",
   "configUi": "config.html",
   "icon": "icon.png",
