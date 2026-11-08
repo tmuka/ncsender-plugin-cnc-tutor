@@ -198,6 +198,18 @@
   .ct-figbox { cursor: pointer; position: relative; }
   .ct-fighint { display: block; text-align: right; font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 4px; }
   .ct-facts { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  #ct-ftbox { display: flex; flex-direction: column; gap: 12px; }
+  .ct-ft-wrap { overflow-x: auto; }
+  .ct-ft-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .ct-ft { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .ct-ft th, .ct-ft td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .ct-ft th { color: var(--color-text-secondary); font-weight: 600; white-space: nowrap; }
+  .ct-ft td { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ct-ft td:first-child { white-space: normal; min-width: 140px; max-width: 220px; }
+  .ct-ft-sub { display: block; color: var(--color-text-secondary) !important; font-size: 0.8rem; }
+  .ct-ft-note { display: block; margin-top: 2px; color: var(--color-text-secondary); font-size: 0.8rem; }
+  .ct-ft-flag { color: var(--ct-warn); }
+  .ct-ft tr.ct-ft-odd td:first-child { box-shadow: inset 3px 0 0 var(--ct-warn); }
   .ct-facts th, .ct-facts td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
   .ct-facts th { color: var(--color-text-secondary); font-weight: 600; width: 38%; }
   .ct-pre { white-space: pre; margin-right: 6px; }
@@ -1016,7 +1028,7 @@ var CT_LESSONS = [
       '<ul><li><strong>Too small a chip</strong> (slow feed, high RPM): the edge rubs instead of cutting. Heat, burn marks, a dull bit, dust instead of chips, even fire.</li>' +
       '<li><strong>Too big a chip</strong> (fast feed): the bit is overloaded. Chatter, a rough edge, the machine straining, broken bits.</li>' +
       '<li><strong>Just right:</strong> chips, not dust; a steady, even sound; the bit warm, not hot.</li></ul>' +
-      '<p>Start from the table below (the same starting points QuickCut, Gears and Spoilboard Toolbox use), make a test cut, then adjust by listening and looking at the chips. To go faster, raise the feed and keep the RPM: bigger chips carry the heat away.</p>' +
+      '<p>Start from the calculator and the table of your bits below (the same starting points QuickCut uses), make a test cut, then adjust by listening and looking at the chips. To go faster, raise the feed and keep the RPM: bigger chips carry the heat away.</p>' +
       '<p><strong>Feeds and speeds belong to one bit in one material.</strong> When you change the bit (another diameter, number of flutes or kind) or the material, work them out again: what cuts pine nicely can burn hardwood or break a small bit in aluminum.</p>',
     quiz: [
       { q: 'The cut makes fine dust and leaves burn marks. Most likely:', a: ['The chip load is too small: feed up or RPM down', 'The chip load is too big'], right: 0, why: 'Dust and heat mean the edge is rubbing. A thicker chip carries the heat away.' },
@@ -1857,6 +1869,76 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 /* END lib/tutor-students.cjs */
 
+/* BEGIN lib/tutor-feeds.cjs */
+// The feeds table in the Feeds and speeds lesson: the starting feeds
+// (QuickCut's startingFeeds) for each cutting bit in ncSender's tool table,
+// or common sizes, in one material, Conservative, Average and Aggressive
+// side by side, with what shapes them in plain words.
+var ctFeedsFn = typeof startingFeeds === 'function' ? startingFeeds : require('./starting-feeds.cjs').startingFeeds;
+
+var CT_FEEDS_COMMON = [
+  { name: '1/8" O-flute', mm: 3.175, flutes: 1 },
+  { name: '1/8" end mill', mm: 3.175, flutes: 2 },
+  { name: '1/8" compression', mm: 3.175, flutes: 2, compression: true, fluteMm: 12.7 },
+  { name: '1/4" O-flute', mm: 6.35, flutes: 1 },
+  { name: '1/4" end mill', mm: 6.35, flutes: 2 },
+  { name: '1/4" compression', mm: 6.35, flutes: 2, compression: true, fluteMm: 25.4 },
+  { name: '6 mm end mill', mm: 6, flutes: 2 },
+  { name: '1/2" end mill', mm: 12.7, flutes: 2 }
+];
+var CT_FEED_STYLES = ['conservative', 'average', 'aggressive'];
+
+// Flutes written in a bit's name: "O Flute", "2 flute", "single flute".
+function ctFlutesFromText(text) {
+  var t = String(text || '').toLowerCase();
+  if (/\b(o|0|zero|single|one)[\s-]*flutes?\b/.test(t)) return 1;
+  var m = /\b([1-4])[\s-]*(?:flutes?|fl)\b/.exec(t) || /\b([1-4])f\b/.exec(t);
+  if (m) return +m[1];
+  var w = /\b(two|double|three|four)[\s-]*flutes?\b/.exec(t);
+  return w ? { two: 2, double: 2, three: 3, four: 4 }[w[1]] : null;
+}
+
+// ncSender's tool table entries that cut sideways: end mills, ball noses,
+// compression bits (not V-bits, drills, surfacing bits or probes).
+function ctFeedsBits(tools) {
+  return (tools || []).filter(function(t) { return t && t.diameter > 0 && (!t.type || /^(flat|ball|compression)$/.test(t.type)); })
+    .map(function(t) {
+      var meta = t.metadata || {}, fromTable = meta.flutes > 0, named = ctFlutesFromText(t.name + ' ' + (meta.notes || ''));
+      return { name: (t.toolNumber > 0 ? 'T' + t.toolNumber + ' ' : '') + (t.name || 'Bit'), mm: t.diameter,
+               flutes: fromTable ? Math.min(4, Math.round(meta.flutes)) : named || 2, flutesFrom: fromTable ? '' : named ? 'name' : 'guess',
+               compression: t.type === 'compression' || /\bcompression\b/i.test(t.name || ''), fluteMm: (t.dimensions && t.dimensions.flute_length) || 0 };
+    });
+}
+
+// One row per bit: its RPM, each style's feed, plunge, depth of each pass,
+// passes for the Total Depth and chip, and notes; odd marks a row to look at.
+function ctFeedsRows(bits, material, depthMm, limits) {
+  return bits.map(function(b) {
+    var deep = { depthMm: depthMm, compression: !!b.compression, fluteMm: b.fluteMm || 0 }, notes = [], odd = false, rpm = 0;
+    var styles = {};
+    CT_FEED_STYLES.forEach(function(style) {
+      var f = ctFeedsFn(b.mm, b.flutes, material, limits, style, deep);
+      rpm = f.rpm;
+      styles[style] = { feedMm: f.feedMm, plungeMm: f.plungeMm, stepMm: f.stepMm, chipMm: f.chipMm,
+                        passes: depthMm > 0 ? Math.max(1, Math.ceil(depthMm / f.stepMm - 1e-9)) : 0 };
+      if (style !== 'average') return;
+      if (f.passes) notes.push({ text: 'compression bit: ' + (f.passes === 1 ? 'the whole depth in one pass' : f.passes + ' equal passes') });
+      if (f.deepChip < 1) notes.push({ text: 'deep pass: a ' + Math.round(f.deepChip * 100) + '% chip, so the bit bends less' });
+      if (f.capped) { notes.push({ text: 'feed held at the starting limit', flag: true }); odd = true; }
+      if (material !== 'aluminum' && f.chipMm < 0.025) { notes.push({ text: 'thin chip: it may rub; try a higher feed or lower RPM', flag: true }); odd = true; }
+    });
+    if (b.flutesFrom === 'name') notes.push({ text: 'flutes read from its name' });
+    if (b.flutesFrom === 'guess') { notes.push({ text: 'flutes not in the tool table: 2 assumed', flag: true }); odd = true; }
+    if (b.fluteMm > 0 && !b.compression && depthMm > b.fluteMm + Math.max(1, b.fluteMm / 10)) { notes.push({ text: 'Total Depth is past its flutes', flag: true }); odd = true; }
+    return { name: b.name, mm: b.mm, flutes: b.flutes, rpm: rpm, styles: styles, notes: notes, odd: odd };
+  });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { CT_FEEDS_COMMON: CT_FEEDS_COMMON, CT_FEED_STYLES: CT_FEED_STYLES, ctFlutesFromText: ctFlutesFromText, ctFeedsBits: ctFeedsBits, ctFeedsRows: ctFeedsRows };
+}
+/* END lib/tutor-feeds.cjs */
+
 /* BEGIN lib/starting-feeds.cjs */
 // Copied from QuickCut (GPL-3.0, siganberg/ncsender-plugin-quickcut) lib/starting-feeds.cjs; keep in step with it.
 /**
@@ -1866,29 +1948,65 @@ if (typeof module !== 'undefined' && module.exports) {
  * (the dialog can't load external JS, so this is the Node-loadable twin
  * that tests/starting-feeds.test.cjs checks that copy against).
  */
-function startingFeeds(bitMm, flutes, material, limits) {
+function startingFeeds(bitMm, flutes, material, limits, style, deep) {
   // By material, as ncCAM's (src/core/tools.js) and Spoilboard Toolbox's:
   // the chip each tooth takes grows with the bit up to a cap; feed = RPM x
   // flutes x chip; plunge 30% of the feed; depth per pass and stepover a
   // share of the bit. HDPE takes a thick chip (a thin one melts it),
   // polycarbonate one between it and acrylic's, aluminum a small one.
-  // limits: the machine's max feed ($110/$111) and spindle range ($30/$31), when known.
+  // limits: the machine's max feed ($110/$111), max Z rate for the plunge ($112) and
+  // spindle range ($30/$31), when known.
+  // style: 'conservative' slows the feed x0.75, even when the machine's max holds it,
+  // except where a thin chip melts or rubs (keepChip); 'aggressive' speeds it x1.25, up
+  // to the material's chip limit and the machine's max. Depth per pass and stepover
+  // x0.75 / x1.2. 'average' (or none) leaves them as is. RPM stays.
+  // deep (optional): { depthMm: Total Depth, stepMm: a Depth of Cut typed by
+  // hand, compression: a compression bit, fluteMm: its flute length }. In
+  // wood (sheet goods are what it's for), a compression bit cuts in the
+  // fewest equal passes no deeper than its flutes or 3x its diameter, 2x
+  // under 6 mm and 1x under 3 mm, where a long pass snaps it, and 1x from
+  // 9.5 mm (3/8") unless Aggressive, where a full-depth pass asks more of
+  // the spindle and the machine than most hobby ones have (its down-cut
+  // top only cleans the face once a pass is past its up-cut tip). A pass
+  // deeper than the bit is wide
+  // loads and bends it: the chip comes down a little, to 87.5% at 2x and
+  // 75% at 3x and past (in wood, heat from a thin chip matters more than
+  // the bend), but not under the material's least chip (minChip, mm, by
+  // the style: a thinner one rubs and burns), nor where a thin chip melts
+  // (keepChip).
   var MATERIALS = {
-    mdf: { rpm: 18000, chip: 0.012, maxChip: 0.25, stepdown: 0.5, stepover: 0.45 },
-    softwood: { rpm: 18000, chip: 0.012, maxChip: 0.25, stepdown: 0.5, stepover: 0.45 },
-    hardwood: { rpm: 18000, chip: 0.009, maxChip: 0.2, stepdown: 0.35, stepover: 0.4 },
-    hdpe: { rpm: 15000, chip: 0.02, maxChip: 0.25, stepdown: 0.3, stepover: 0.4 },
-    acrylic: { rpm: 16000, chip: 0.015, maxChip: 0.2, stepdown: 0.3, stepover: 0.4 },
-    polycarbonate: { rpm: 16000, chip: 0.018, maxChip: 0.22, stepdown: 0.3, stepover: 0.4 },
-    aluminum: { rpm: 18000, chip: 0.0045, maxChip: 0.06, stepdown: 0.1, stepover: 0.25 },
-    foam: { rpm: 12000, chip: 0.02, maxChip: 0.4, stepdown: 1, stepover: 0.6 }
+    mdf: { rpm: 18000, chip: 0.012, maxChip: 0.25, minChip: 0.05, stepdown: 0.5, stepover: 0.45, wood: true },
+    softwood: { rpm: 18000, chip: 0.012, maxChip: 0.25, minChip: 0.05, stepdown: 0.5, stepover: 0.45, wood: true },
+    hardwood: { rpm: 18000, chip: 0.009, maxChip: 0.2, minChip: 0.05, stepdown: 0.35, stepover: 0.4, wood: true },
+    hdpe: { rpm: 15000, chip: 0.02, maxChip: 0.25, stepdown: 0.3, stepover: 0.4, keepChip: true },
+    acrylic: { rpm: 16000, chip: 0.015, maxChip: 0.2, stepdown: 0.3, stepover: 0.4, keepChip: true },
+    polycarbonate: { rpm: 16000, chip: 0.018, maxChip: 0.22, stepdown: 0.3, stepover: 0.4, keepChip: true },
+    aluminum: { rpm: 18000, chip: 0.0045, maxChip: 0.06, stepdown: 0.1, stepover: 0.25, keepChip: true },
+    foam: { rpm: 12000, chip: 0.02, maxChip: 0.4, minChip: 0.05, stepdown: 1, stepover: 0.6 }
   };
   var m = MATERIALS[material] || MATERIALS.mdf, L = limits || {};
+  var S = { conservative: { chip: 0.75, cut: 0.75 }, aggressive: { chip: 1.25, cut: 1.2 } }[style] || { chip: 1, cut: 1 };
   var rpm = Math.round(Math.min(L.maxRpm || 24000, Math.max(L.minRpm || 0, m.rpm)));
-  var chip = Math.min(m.maxChip, m.chip * bitMm), maxFeed = Math.min(L.maxFeed || 4000, 4000);
-  var raw = rpm * (flutes || 2) * chip, feed = Math.round(Math.min(maxFeed, Math.max(150, raw)));
-  return { rpm: rpm, chipMm: chip, feedMm: feed, capped: raw > maxFeed,
-           plungeMm: Math.round(Math.max(60, feed * 0.3)), stepMm: Math.max(0.05, bitMm * m.stepdown), stepoverPct: Math.round(m.stepover * 100) };
+  var maxFeed = Math.min(L.maxFeed || 4000, 4000), perRev = rpm * (flutes || 2);
+  var avg = Math.min(maxFeed, perRev * Math.min(m.maxChip, m.chip * bitMm));
+  var raw = S.chip < 1 ? avg * (m.keepChip ? 1 : S.chip) : perRev * Math.min(m.maxChip, m.chip * bitMm * S.chip);
+  var D = deep || {}, step = Math.max(0.05, bitMm * m.stepdown * S.cut), passes = 0;
+  if (D.compression && m.wood && D.depthMm > 0 && bitMm > 0) {
+    var times = bitMm >= 9.5 && style !== 'aggressive' ? 1 : bitMm >= 6 ? 3 : bitMm >= 3 ? 2 : 1;
+    var most = Math.min(D.fluteMm > 0 ? D.fluteMm : Infinity, times * bitMm);
+    passes = Math.max(1, Math.ceil(D.depthMm / most - 1e-9));
+    step = D.depthMm / passes;
+  }
+  var pass = D.stepMm > 0 ? D.stepMm : step, ratio = bitMm > 0 ? pass / bitMm : 0;
+  // deepChip: how much the deep pass took off the feed, after the caps.
+  var shallow = Math.min(maxFeed, Math.max(150, raw));
+  if (!m.keepChip && ratio > 1 && raw > 0) {
+    var eased = raw * Math.max(0.75, 1 - 0.125 * (ratio - 1)), least = Math.min(raw, perRev * (m.minChip || 0) * S.chip);
+    raw = Math.max(eased, least);
+  }
+  var exact = Math.min(maxFeed, Math.max(150, raw)), feed = Math.round(exact), deepChip = exact / shallow;
+  return { rpm: rpm, chipMm: exact / perRev, feedMm: feed, capped: raw > maxFeed, deepChip: deepChip, passes: passes,
+           plungeMm: Math.round(Math.min(L.maxPlunge || Infinity, Math.max(60, feed * 0.3))), stepMm: step, stepoverPct: Math.round(Math.min(0.9, m.stepover * S.cut) * 100) };
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -1963,6 +2081,7 @@ if (typeof module !== 'undefined' && module.exports) {
     st.fw = r[0]; st.ncs = r[1] || {};
     if (r[2] && r[2].machineState && !st.heard) st.state = r[2];
     st.facts = machineFacts(st.fw, st.ncs, st.state.machineState);
+    refreshFeedsBox();
   }
   function ms() { return st.state.machineState || {}; }
   function onMessage(ev) {
@@ -2303,7 +2422,7 @@ if (typeof module !== 'undefined' && module.exports) {
         return '<button type="button" class="ct-gline">' + code + (cmt ? ' <span class="ct-cmt">' + esc(cmt) + '</span>' : '') + '<span class="ct-explain">' + esc(words.charAt(0).toUpperCase() + words.slice(1)) + '.</span></button>';
       }).join('') + '</div>';
     },
-    feeds: function() { return ROOT.querySelector('#ct-f-bit') ? null : feedsCalc(); },
+    feeds: function() { return ROOT.querySelector('#ct-f-bit') ? null : feedsCalc() + feedsTableBox(); },
     facts: function() {
       var f = st.facts, t = f.travel, r = f.maxRate;
       if (!ms().connected && !f.known) return '<p>ncSender isn’t connected to the controller, so its settings can’t be read yet.</p>';
@@ -2456,6 +2575,62 @@ if (typeof module !== 'undefined' && module.exports) {
       (feed > 4000 ? ' Over ' + fmtFeed(4000, st.facts.units) + ' is a lot for most hobby machines: check the bit maker’s numbers.' : '');
   }
 
+  // ---------- feeds table ----------
+  // Every bit in the tool table (or common sizes) in the calculator's
+  // material, the three styles side by side. Its Tools and Total Depth are
+  // this screen's (localStorage); a row's Use puts the bit in the calculator.
+  var ft = { source: local('feedsSource'), depthMm: local('feedsDepthMm') };
+  var FEED_STYLE_NAMES = { conservative: 'Conservative', average: 'Average', aggressive: 'Aggressive' };
+  function feedsTableBox() {
+    var mine = ctFeedsBits(st.tools), inch = st.facts.units === 'in';
+    var src = feedsSource();
+    if (!(ft.depthMm > 0)) ft.depthMm = inch ? 19.05 : 19;
+    return '<div id="ct-ftbox"><h3 class="ct-h2">Your bits</h3>' +
+      '<p class="ct-sub">The starting points for each bit in the material above. <strong>Average</strong> is the usual start; <strong>Conservative</strong> is gentler (feed &times;0.75), <strong>Aggressive</strong> pushes harder (&times;1.25). Use puts a bit in the calculator.</p>' +
+      '<div class="ct-row">' +
+      '<div class="ct-field"><label for="ct-ft-source">Bits</label><select class="ct-select" id="ct-ft-source">' +
+        '<option value="mine"' + (src === 'mine' ? ' selected' : '') + (mine.length ? '' : ' disabled') + '>My tools (' + mine.length + ')</option>' +
+        '<option value="common"' + (src === 'common' ? ' selected' : '') + '>Common sizes</option></select></div>' +
+      '<div class="ct-field"><label for="ct-ft-depth">Total Depth (' + (inch ? 'in' : 'mm') + ')</label><input class="ct-input" id="ct-ft-depth" inputmode="decimal" value="' + esc(String(+(ft.depthMm / (inch ? 25.4 : 1)).toFixed(inch ? 3 : 2))) + '"></div></div>' +
+      '<div class="ct-ft-wrap" id="ct-ft">' + feedsTable() + '</div></div>';
+  }
+  // My tool table unless Common sizes was picked or it has no end mills.
+  function feedsSource() { return ft.source === 'common' || !ctFeedsBits(st.tools).length ? 'common' : 'mine'; }
+  // The tool table and units arrive after the first render.
+  function refreshFeedsBox() { var b = $('ct-ftbox'); if (b) b.outerHTML = feedsTableBox(); }
+  function feedsTable() {
+    var inch = st.facts.units === 'in', u = st.facts.units;
+    var mat = ($('ct-f-mat') && $('ct-f-mat').value) || (P.feeds && P.feeds.material) || 'mdf';
+    var bits = feedsSource() === 'mine' ? ctFeedsBits(st.tools) : CT_FEEDS_COMMON;
+    if (!bits.length) return '<p class="ct-sub">No end mills in ncSender’s tool table yet: pick Common sizes.</p>';
+    var limits = { maxRpm: st.facts.rpm.max || undefined, minRpm: st.facts.rpm.min || undefined, maxFeed: Math.min(st.facts.maxRate.x || 4000, st.facts.maxRate.y || 4000), maxPlunge: st.facts.maxRate.z || undefined };
+    var rows = ctFeedsRows(bits, mat, ft.depthMm, limits);
+    return '<table class="ct-ft"><thead><tr><th>Bit</th><th>RPM</th>' + CT_FEED_STYLES.map(function(s) { return '<th>' + FEED_STYLE_NAMES[s] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function(r, i) {
+        return '<tr' + (r.odd ? ' class="ct-ft-odd"' : '') + '><td><span class="ct-ft-name" title="' + esc(r.name) + '">' + esc(r.name) + '</span><span class="ct-ft-sub">' + L(r.mm) + ' · ' + r.flutes + (r.flutes === 1 ? ' flute' : ' flutes') + '</span>' +
+          (r.notes.length ? '<span class="ct-ft-note">' + r.notes.map(function(n) { return n.flag ? '<span class="ct-ft-flag">' + esc(n.text) + '</span>' : esc(n.text); }).join('; ') + '</span>' : '') +
+          '<button type="button" class="ct-linkbtn" data-ft-use="' + i + '">Use</button></td><td>' + r.rpm + '</td>' +
+          CT_FEED_STYLES.map(function(s) {
+            var c = r.styles[s];
+            return '<td><strong>' + fmtFeed(c.feedMm, u) + '</strong><span class="ct-ft-sub">plunge ' + fmtFeed(c.plungeMm, u) + '</span>' +
+              '<span class="ct-ft-sub">' + L(c.stepMm) + (c.passes ? ' × ' + c.passes : '') + '</span>' +
+              '<span class="ct-ft-sub">chip ' + L(c.chipMm, inch ? 4 : 3) + '</span></td>';
+          }).join('') + '</tr>';
+      }).join('') + '</tbody></table>' +
+      '<p class="ct-sub">Each style: feed, plunge, the depth of each pass × passes for the Total Depth, and the chip each flute takes. A bar on the left marks a row to look at.</p>';
+  }
+  function updateFeedsTable() { if ($('ct-ft')) $('ct-ft').innerHTML = feedsTable(); }
+  function useFeedsBit(i) {
+    var bits = feedsSource() === 'mine' ? ctFeedsBits(st.tools) : CT_FEEDS_COMMON, b = bits[i];
+    if (!b || !$('ct-f-bit')) return;
+    var inch = st.facts.units === 'in';
+    $('ct-f-bit').value = inch ? String(+(b.mm / 25.4).toFixed(4)) : String(+b.mm.toFixed(3));
+    $('ct-f-flutes').value = String(b.flutes);
+    $('ct-f-rpm').value = ''; $('ct-f-chip').value = '';
+    updateFeeds();
+    $('ct-f-bit').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   // ---------- Try it ----------
   function renderChecks() {
     var lists = ROOT.querySelectorAll('[data-checks]');
@@ -2537,6 +2712,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var t = e.target.closest('button, input[type="checkbox"]');
     if (!t || !ROOT.contains(t)) return;
     var a;
+    if ((a = t.getAttribute('data-ft-use')) != null) { useFeedsBit(+a); return; }
     if ((a = t.getAttribute('data-pick'))) {
       setStudent(a); renderNav(); restoreTry();
       var s = student(), want = st.wanted; st.wanted = null;
@@ -2615,7 +2791,16 @@ if (typeof module !== 'undefined' && module.exports) {
       if (e.target.id === 'ct-rename') { var b = ROOT.querySelector('[data-rename-save]'); if (b) b.click(); }
     });
     ROOT.addEventListener('input', function(e) { if (e.target.id && e.target.id.indexOf('ct-f-') === 0) updateFeeds(); });
-    ROOT.addEventListener('change', function(e) { if (e.target.id === 'ct-f-mat') { $('ct-f-rpm').value = ''; $('ct-f-chip').value = ''; updateFeeds(); } });
+    ROOT.addEventListener('change', function(e) {
+      if (e.target.id === 'ct-f-mat') { $('ct-f-rpm').value = ''; $('ct-f-chip').value = ''; updateFeeds(); updateFeedsTable(); }
+      if (e.target.id === 'ct-ft-source') { ft.source = e.target.value; local('feedsSource', ft.source); updateFeedsTable(); }
+    });
+    ROOT.addEventListener('input', function(e) {
+      if (e.target.id !== 'ct-ft-depth') return;
+      var v = Number(String(e.target.value).trim()), ok = isFinite(v) && v > 0;
+      e.target.classList.toggle('ct-bad', !ok);
+      if (ok) { ft.depthMm = v * (st.facts.units === 'in' ? 25.4 : 1); local('feedsDepthMm', ft.depthMm); updateFeedsTable(); }
+    });
     $('ct-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
     $('ct-mini-back').addEventListener('click', function() { setMini(false); });
     $('ct-mini-reset').addEventListener('click', function() { st.tracker = startTracker(st.state); keepTry(); renderChecks(); });
